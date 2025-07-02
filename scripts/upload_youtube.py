@@ -14,7 +14,8 @@ SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 COMPILED_VIDEO_PATH = os.path.join("data", "compiled_video.mp4")
 THUMBNAIL_PATH = os.path.join("data", "thumbnail.jpg")
-METADATA_JSON_PATH = os.path.join("data", "metadata.json")
+# --- CORRECTION ICI : Le fichier de métadonnées est video_metadata.json ---
+METADATA_JSON_PATH = os.path.join("data", "video_metadata.json") # <-- CORRIGÉ
 
 def upload_video():
     print("📤 Démarrage de l'upload YouTube...")
@@ -29,6 +30,9 @@ def upload_video():
     title = metadata["title"]
     description = metadata["description"]
     tags = metadata["tags"]
+    # Récupérer la catégorie et le statut de confidentialité depuis les métadonnées
+    category_id = metadata.get("category_id", "20") # Par défaut "Gaming"
+    privacy_status = metadata.get("privacyStatus", "public")
 
     # 2. Authentification YouTube (via Refresh Token)
     creds = None
@@ -67,22 +71,23 @@ def upload_video():
     if not os.path.exists(COMPILED_VIDEO_PATH):
         print(f"❌ Fichier vidéo compilée '{COMPILED_VIDEO_PATH}' introuvable.")
         sys.exit(1)
-    if not os.path.exists(THUMBNAIL_PATH):
-        print(f"❌ Fichier miniature '{THUMBNAIL_PATH}' introuvable.")
-        # Ne pas exit ici, on peut uploader sans miniature, mais c'est mieux de la logger.
-        thumbnail_present = False
-    else:
+    
+    thumbnail_present = False
+    if os.path.exists(THUMBNAIL_PATH):
         thumbnail_present = True
+    else:
+        print(f"⚠️ Fichier miniature '{THUMBNAIL_PATH}' introuvable. La vidéo sera uploadée sans miniature personnalisée.")
+
 
     body = {
         "snippet": {
             "title": title,
             "description": description,
             "tags": tags,
-            "categoryId": "20" # Catégorie "Gaming" (20) ou "People & Blogs" (22) ou "Entertainment" (24)
+            "categoryId": category_id # Utilise la catégorie des métadonnées
         },
         "status": {
-            "privacyStatus": "public", # ou "unlisted" pour tester
+            "privacyStatus": privacy_status, # Utilise le statut de confidentialité des métadonnées
             "selfDeclaredMadeForKids": False # Important: doit être False si pas pour enfants
         }
     }
@@ -104,11 +109,15 @@ def upload_video():
         # Uploader la miniature
         if thumbnail_present:
             print(f"Uploading thumbnail: '{THUMBNAIL_PATH}'...")
-            youtube.thumbnails().set(
-                videoId=response['id'],
-                media_body=MediaFileUpload(THUMBNAIL_PATH)
-            ).execute()
-            print("✅ Miniature uploadée avec succès !")
+            try:
+                youtube.thumbnails().set(
+                    videoId=response['id'],
+                    media_body=MediaFileUpload(THUMBNAIL_PATH)
+                ).execute()
+                print("✅ Miniature uploadée avec succès !")
+            except Exception as thumbnail_e:
+                print(f"❌ ERREUR lors de l'upload de la miniature : {thumbnail_e}")
+                print("Cela peut être dû à des permissions manquantes sur votre chaîne YouTube pour les miniatures personnalisées.")
         else:
             print("⚠️ Pas de miniature trouvée, upload ignoré.")
         
