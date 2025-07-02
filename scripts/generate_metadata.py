@@ -57,7 +57,7 @@ def generate_metadata():
         "title": title,
         "description": description,
         "tags": ["Twitch", "Clips", "BestOf", "Gaming", "Highlights", "DailyClips", "Top10", "Compilation", "MomentsForts", "FR", "Francophone"],
-        "category": "Gaming", # Ou "People & Blogs", "Comedy" etc. Choisissez la catégorie la plus pertinente
+        "categoryId": "Gaming", # Ou "People & Blogs", "Comedy" etc. Choisissez la catégorie la plus pertinente
         "privacyStatus": "public" # "public", "private", "unlisted"
     }
 
