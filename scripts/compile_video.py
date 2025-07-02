@@ -7,6 +7,10 @@ INPUT_PATHS_JSON = os.path.join("data", "downloaded_clip_paths.json")
 OUTPUT_VIDEO_PATH = os.path.join("data", "compiled_video.mp4")
 CLIPS_LIST_TXT = os.path.join("data", "clips_list.txt")
 
+# Obtenir le répertoire racine du dépôt (où se trouve .github/)
+# C'est généralement /home/runner/work/bot-clip-twitch/bot-clip-twitch/
+REPO_ROOT = os.getcwd() 
+
 def compile_video():
     print("🎬 Compilation des clips vidéo...")
     
@@ -22,35 +26,16 @@ def compile_video():
         sys.exit(0)
 
     # Créer le fichier texte pour FFmpeg
-    # Le chemin dans le fichier doit être relatif au répertoire de travail de FFmpeg,
-    # qui est la racine du dépôt ("/home/runner/work/bot-clip-twitch/bot-clip-twitch/")
+    # Les chemins dans le fichier DOIVENT être des chemins absolus pour éviter toute ambiguïté.
     with open(CLIPS_LIST_TXT, "w") as f:
         for path in downloaded_clip_paths:
-            # Assurez-vous que le chemin est correct.
-            # Il devrait déjà être "data/raw_clips/clip_..."
-            # Nous allons explicitement nous assurer qu'il n'y a qu'une seule instance de "data/" au début
+            # Assurer que le chemin est un chemin absolu complet pour FFmpeg
+            # path est par exemple "data/raw_clips/clip_1_ID.mp4"
+            # Nous le transformons en "/home/runner/work/.../data/raw_clips/clip_1_ID.mp4"
+            full_absolute_path = os.path.join(REPO_ROOT, path)
             
-            # Méthode plus robuste pour garantir le bon chemin relatif
-            # On prend la partie du chemin après "data/" (s'il y a un "data/" au début)
-            # Puis on la reconstitue avec un seul "data/"
-            
-            # Initialement, les chemins sont par exemple : "data/raw_clips/clip_1_ID.mp4"
-            # Si pour une raison inconnue ils devenaient "/home/runner/work/.../data/raw_clips/...",
-            # ou "data/data/raw_clips/...", cette logique les normaliserait.
-            
-            if path.startswith("data/raw_clips/"):
-                cleaned_path = path # Le chemin est déjà correct
-            elif path.startswith("raw_clips/"): # Si pour une raison l'étape de DL omet "data/"
-                cleaned_path = os.path.join("data", path)
-            elif "data/data/raw_clips/" in path: # Cas de l'erreur persistante
-                cleaned_path = path.replace("data/data/raw_clips/", "data/raw_clips/")
-            else:
-                cleaned_path = path # Garde le chemin tel quel si non reconnu
-            
-            # Pour être absolument certain, on peut aussi reconstruire le chemin depuis la racine si nécessaire.
-            # Mais les chemins sont déjà relatifs à la racine.
-            
-            f.write(f"file '{cleaned_path}'\n")
+            # Pour la commande ffmpeg, les chemins doivent être formatés correctement
+            f.write(f"file '{full_absolute_path}'\n")
 
     command = [
         "ffmpeg",
@@ -58,13 +43,14 @@ def compile_video():
         "-safe", "0",
         "-i", CLIPS_LIST_TXT,
         "-c", "copy",
-        OUTPUT_VIDEO_PATH
+        OUTPUT_VIDEO_PATH # Ce chemin est déjà relatif à la racine du dépôt, ce qui est OK pour la sortie
     ]
     
     print(f"Exécution de la commande FFmpeg: {' '.join(command)}")
 
     try:
-        subprocess.run(command, check=True)
+        # Exécuter la commande depuis le répertoire racine du dépôt
+        subprocess.run(command, check=True, cwd=REPO_ROOT) # <-- Spécifie explicitement le répertoire de travail
         print(f"✅ Vidéo compilée avec succès : {OUTPUT_VIDEO_PATH}")
     except subprocess.CalledProcessError as e:
         print(f"❌ Erreur lors de la compilation vidéo : {e}")
