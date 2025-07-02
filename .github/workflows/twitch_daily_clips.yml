@@ -4,7 +4,7 @@ name: Twitch Daily Top 10 Clips
 on:
   schedule:
     # Exécute tous les jours à 00h30 UTC (ajustez l'heure selon quand vous voulez le "best-of" du jour précédent)
-    - cron: '30 0 * * *' 
+    - cron: '30 0 * * *'  
   workflow_dispatch: # Permet de déclencher manuellement le workflow
 
 jobs:
@@ -41,11 +41,20 @@ jobs:
     - name: 📥 Download Individual Clips
       run: python scripts/download_clips.py
 
+    # --- DÉBUT DE L'ÉTAPE DE DÉBOGAGE TEMPORAIRE ---
+    - name: 🐛 Debug - Show downloaded_clip_paths.json content
+      run: |
+        echo "Contenu de downloaded_clip_paths.json :"
+        cat data/downloaded_clip_paths.json
+        echo "--- Fin du contenu ---"
+    # --- FIN DE L'ÉTAPE DE DÉBOGAGE TEMPORAIRE ---
+
     - name: 🎬 Compile Video
       run: python scripts/compile_video.py
 
     - name: 📝 Generate Metadata and Thumbnail
-      run: python scripts/generate_metadata.py
+      # Assurez-vous que le nom du script est correct (si c'est generate_metadata.py ou generate_metadata_thumbnail.py)
+      run: python scripts/generate_metadata.py 
 
     - name: 📤 Upload to YouTube
       env:
