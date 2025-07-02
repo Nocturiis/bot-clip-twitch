@@ -63,11 +63,11 @@ GAME_IDS = [
 # C'est le MEILLEUR moyen de cibler le contenu francophone.
 # Pour trouver l'ID d'un streamer, utilisez le script get_broadcaster_id.py.
 BROADCASTER_IDS = [
+    "737048563", # Anyme023
     "52130765",  # Squeezie
     "41719107",  # ZeratoR
     "24147592",  # Gotaga
     "134966333", # Kameto
-    "737048563", # Anyme023
     "496105401", # byilhann
     "887001013", # Nico_la
     "60256640",  # Flamby
