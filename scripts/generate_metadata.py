@@ -62,9 +62,9 @@ def generate_metadata():
     for i, clip in enumerate(clips_data):
         title_clip = clip.get('title', 'Titre inconnu') 
         broadcaster = clip.get('broadcaster_name', 'Streamer inconnu')
-        views = clip.get('viewer_count', 0) 
+        #views = clip.get('viewer_count', 0) 
         # Suppression des apostrophes autour du titre du clip dans la description
-        description += f"- {i+1}. {title_clip} par {broadcaster} (vues: {views})\n"
+        description += f"- {i+1}. {title_clip} par {broadcaster}\n"
 
     description += "\nN'oubliez pas de vous abonner pour ne manquer aucune compilation quotidienne !\n\n"
     # Ajout des tags pour le référencement
