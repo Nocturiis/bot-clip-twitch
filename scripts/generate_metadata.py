@@ -1,72 +1,70 @@
-import subprocess
 import os
 import json
-import datetime
+from datetime import datetime
 
-COMPILED_VIDEO_PATH = os.path.join("data", "compiled_video.mp4")
-THUMBNAIL_PATH = os.path.join("data", "thumbnail.jpg")
-METADATA_JSON_PATH = os.path.join("data", "metadata.json")
-THUMB_OFFSET = "00:00:05" # Prend une image à 5 secondes de la vidéo compilée
+INPUT_CLIPS_JSON = os.path.join("data", "top_clips.json")
+OUTPUT_METADATA_JSON = os.path.join("data", "video_metadata.json")
 
 def generate_metadata():
-    print("📝 Génération du titre, de la description et de la miniature...")
+    print("📝 Génération des métadonnées de la vidéo...")
     
-    today = datetime.date.today()
-    # Titre : ex. "TOP 10 TWITCH CLIPS - Daily Best Moments - 01 Juillet 2025"
-    title = f"TOP 10 TWITCH CLIPS - Daily Best Moments - {today.strftime('%d %B %Y')}"
-    
-    # Description (va lister les clips)
-    description = f"Découvrez les 10 clips Twitch les plus populaires du {today.strftime('%d %B %Y')} !\n\n"
-    
-    # Lire les clips originaux pour la description détaillée
-    original_clips_json = os.path.join("data", "top_clips.json")
-    if os.path.exists(original_clips_json):
-        with open(original_clips_json, "r", encoding="utf-8") as f:
-            clips_data = json.load(f)
-        
-        description += "Clips inclus :\n"
-        for i, clip in enumerate(clips_data):
-            description += f"- {i+1}. '{clip['title']}' par {clip['broadcaster_name']} (vues: {clip['viewer_count']:,})\n"
-            # Optionnel: inclure le lien du clip original si désiré, mais risque de spam/référencement externe
-            # description += f"  Lien original: {clip['url']}\n"
-        description += "\nN'oubliez pas de vous abonner pour ne manquer aucune compilation quotidienne !\n"
-    else:
-        description += "Pas de détails de clips disponibles.\n"
+    if not os.path.exists(INPUT_CLIPS_JSON):
+        print(f"❌ Erreur: Le fichier '{INPUT_CLIPS_JSON}' est introuvable. Assurez-vous que la récupération des clips a réussi.")
+        exit(1)
 
-    description += "\n#Twitch #Clips #BestOf #Gaming #Highlights #DailyClips #Top10" # Tags YouTube
+    with open(INPUT_CLIPS_JSON, "r", encoding="utf-8") as f:
+        clips_data = json.load(f)
 
-    # Miniature
-    if not os.path.exists(COMPILED_VIDEO_PATH):
-        print(f"❌ Fichier vidéo compilée '{COMPILED_VIDEO_PATH}' introuvable pour la miniature.")
-        sys.exit(1)
+    if not clips_data:
+        print("⚠️ Aucune donnée de clip à traiter. Le fichier top_clips.json est vide.")
+        # Générer des métadonnées vides ou avec un titre par défaut si aucun clip n'est trouvé
+        default_title = f"TOP TWITCH CLIPS FR - {datetime.now().strftime('%d %B')}"
+        video_metadata = {
+            "title": default_title,
+            "description": f"Désolé, aucune compilation de clips disponible pour aujourd'hui. Revenez demain !",
+            "tags": ["Twitch", "Clips", "BestOf", "Gaming", "Highlights", "Compilation", "FR", "Francophone"],
+            "category": "Gaming",
+            "privacyStatus": "unlisted" # Mettre en "unlisted" si la vidéo est vide
+        }
+        with open(OUTPUT_METADATA_JSON, "w", encoding="utf-8") as f:
+            json.dump(video_metadata, f, ensure_ascii=False, indent=2)
+        print(f"✅ Métadonnées par défaut générées et sauvegardées dans {OUTPUT_METADATA_JSON} (aucun clip trouvé).")
+        exit(0) 
+
+    # Le clip le plus populaire est le premier de la liste car get_top_clips les trie par vues
+    most_popular_clip_title = clips_data[0].get('title', 'Clip populaire') 
     
-    try:
-        command = [
-            "ffmpeg",
-            "-ss", THUMB_OFFSET,
-            "-i", COMPILED_VIDEO_PATH,
-            "-vframes", "1",
-            THUMBNAIL_PATH
-        ]
-        subprocess.run(command, check=True)
-        print(f"✅ Miniature générée dans {THUMBNAIL_PATH}")
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Erreur lors de la génération de la miniature : {e}")
-        if e.stderr: print(f"    STDERR: {e.stderr.decode()}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"❌ Erreur inattendue lors de la génération de la miniature : {e}")
-        sys.exit(1)
+    today_date = datetime.now() # Récupère la date actuelle
 
-    # Sauvegarde les métadonnées dans un fichier JSON pour le script d'upload
-    metadata = {
+    # --- Construction du NOUVEAU TITRE de la vidéo ---
+    # Exemple: "Titre du clip le plus populaire" | Le Clip Twitch du Jour FR - 26 Février
+    title = f'"{most_popular_clip_title}" | Le Clip Twitch du Jour FR - {today_date.strftime("%d %B")}'
+
+    # Construire la description de la vidéo (comme précédemment)
+    description = f"Découvrez les {len(clips_data)} clips Twitch les plus populaires du {today_date.strftime('%d %B %Y')} !\n\nClips inclus :\n"
+
+    for i, clip in enumerate(clips_data):
+        title_clip = clip.get('title', 'Titre inconnu') # Renommé pour éviter conflit avec 'title' global
+        broadcaster = clip.get('broadcaster_name', 'Streamer inconnu')
+        views = clip.get('viewer_count', 0) 
+        description += f"- {i+1}. '{title_clip}' par {broadcaster} (vues: {views})\n"
+
+    description += "\nN'oubliez pas de vous abonner pour ne manquer aucune compilation quotidienne !\n\n"
+    # Ajout des tags pour le référencement
+    description += "#Twitch #Clips #BestOf #Gaming #Highlights #DailyClips #Top10 #Compilation #MomentsForts #FR #Francophone"
+    
+    video_metadata = {
         "title": title,
         "description": description,
-        "tags": ["Twitch", "Clips", "Best Of", "Gaming", "Highlights", "DailyClips", "Top 10"]
+        "tags": ["Twitch", "Clips", "BestOf", "Gaming", "Highlights", "DailyClips", "Top10", "Compilation", "MomentsForts", "FR", "Francophone"],
+        "category": "Gaming", # Ou "People & Blogs", "Comedy" etc. Choisissez la catégorie la plus pertinente
+        "privacyStatus": "public" # "public", "private", "unlisted"
     }
-    with open(METADATA_JSON_PATH, "w", encoding="utf-8") as f:
-        json.dump(metadata, f, ensure_ascii=False, indent=2)
-    print("✅ Métadonnées sauvegardées dans metadata.json")
+
+    with open(OUTPUT_METADATA_JSON, "w", encoding="utf-8") as f:
+        json.dump(video_metadata, f, ensure_ascii=False, indent=2)
+
+    print(f"✅ Métadonnées générées et sauvegardées dans {OUTPUT_METADATA_JSON}")
 
 if __name__ == "__main__":
     generate_metadata()
