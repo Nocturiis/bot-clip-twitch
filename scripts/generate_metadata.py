@@ -1,6 +1,20 @@
 import os
 import json
 from datetime import datetime
+import locale # Importe le module locale
+
+# Définir la locale pour avoir les mois en français
+# Cela dépend de l'environnement, sur Ubuntu (GitHub Actions), 'fr_FR.UTF-8' fonctionne souvent.
+try:
+    locale.setlocale(locale.LC_TIME, 'fr_FR.UTF-8')
+except locale.Error:
+    print("⚠️ La locale 'fr_FR.UTF-8' n'est pas disponible. Les dates resteront en anglais.")
+    # Fallback pour d'autres systèmes, ou si la locale n'est pas installée
+    try:
+        locale.setlocale(locale.LC_TIME, 'fr_FR')
+    except locale.Error:
+        print("⚠️ La locale 'fr_FR' n'est pas disponible non plus. Les dates resteront en anglais.")
+
 
 INPUT_CLIPS_JSON = os.path.join("data", "top_clips.json")
 OUTPUT_METADATA_JSON = os.path.join("data", "video_metadata.json")
@@ -23,7 +37,7 @@ def generate_metadata():
             "title": default_title,
             "description": f"Désolé, aucune compilation de clips disponible pour aujourd'hui. Revenez demain !",
             "tags": ["Twitch", "Clips", "BestOf", "Gaming", "Highlights", "Compilation", "FR", "Francophone"],
-            "category": "Gaming",
+            "categoryId": "20",
             "privacyStatus": "unlisted" # Mettre en "unlisted" si la vidéo est vide
         }
         with open(OUTPUT_METADATA_JSON, "w", encoding="utf-8") as f:
@@ -38,16 +52,19 @@ def generate_metadata():
 
     # --- Construction du NOUVEAU TITRE de la vidéo ---
     # Exemple: "Titre du clip le plus populaire" | Le Clip Twitch du Jour FR - 26 Février
-    title = f'"{most_popular_clip_title}" | Le Clip Twitch du Jour FR - {today_date.strftime("%d %B")}'
+    # Suppression des crochets du titre principal
+    title = f'{most_popular_clip_title} | Le Clip Twitch du Jour FR - {today_date.strftime("%d %B")}'
 
-    # Construire la description de la vidéo (comme précédemment)
+    # Construire la description de la vidéo
+    # Formatage de la date en français pour la description complète
     description = f"Découvrez les {len(clips_data)} clips Twitch les plus populaires du {today_date.strftime('%d %B %Y')} !\n\nClips inclus :\n"
 
     for i, clip in enumerate(clips_data):
-        title_clip = clip.get('title', 'Titre inconnu') # Renommé pour éviter conflit avec 'title' global
+        title_clip = clip.get('title', 'Titre inconnu') 
         broadcaster = clip.get('broadcaster_name', 'Streamer inconnu')
         views = clip.get('viewer_count', 0) 
-        description += f"- {i+1}. '{title_clip}' par {broadcaster} (vues: {views})\n"
+        # Suppression des apostrophes autour du titre du clip dans la description
+        description += f"- {i+1}. {title_clip} par {broadcaster} (vues: {views})\n"
 
     description += "\nN'oubliez pas de vous abonner pour ne manquer aucune compilation quotidienne !\n\n"
     # Ajout des tags pour le référencement
@@ -57,7 +74,7 @@ def generate_metadata():
         "title": title,
         "description": description,
         "tags": ["Twitch", "Clips", "BestOf", "Gaming", "Highlights", "DailyClips", "Top10", "Compilation", "MomentsForts", "FR", "Francophone"],
-        "categoryId": "Gaming", # Ou "People & Blogs", "Comedy" etc. Choisissez la catégorie la plus pertinente
+        "categoryId": "20",
         "privacyStatus": "public" # "public", "private", "unlisted"
     }
 
