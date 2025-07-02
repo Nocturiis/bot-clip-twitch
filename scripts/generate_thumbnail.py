@@ -106,8 +106,8 @@ def generate_thumbnail():
         try:
             logo = Image.open(LOGO_PATH).convert("RGBA") # Garder le canal alpha pour la transparence
             # Redimensionner le logo si nécessaire (ex: 30% de la largeur de la miniature)
-            logo_max_width = int(THUMBNAIL_WIDTH * 0.5) # Le logo prend 50% de la largeur max
-            logo_max_height = int(THUMBNAIL_HEIGHT * 0.5) # Le logo prend 50% de la hauteur max
+            logo_max_width = int(THUMBNAIL_WIDTH * 1) # Le logo prend 50% de la largeur max
+            logo_max_height = int(THUMBNAIL_HEIGHT * 1) # Le logo prend 50% de la hauteur max
             
             # Calculer le ratio pour redimensionner le logo sans déformer
             logo_ratio = min(logo_max_width / logo.width, logo_max_height / logo.height)
