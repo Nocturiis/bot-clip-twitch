@@ -1,7 +1,8 @@
 import requests
 import os
 import json
-from datetime import datetime, timedelta
+import sys # <-- AJOUTEZ CETTE LIGNE
+from datetime import datetime, timedelta, timezone # <-- MODIFIEZ CETTE LIGNE, ajoutez 'timezone'
 
 # Twitch API credentials from GitHub Secrets
 CLIENT_ID = os.getenv("TWITCH_CLIENT_ID")
@@ -44,17 +45,20 @@ def get_top_clips(access_token, num_clips=10, days_ago=1):
     }
 
     # Calcul des dates pour la période de recherche
-    end_date = datetime.utcnow() # Maintenant
-    start_date = end_date - timedelta(days=days_ago) # Il y a X jours
+    # Utilisation de datetime.now(datetime.UTC) et formatage sans microsecondes
+    end_date = datetime.now(timezone.utc) # Maintenant, en UTC
+    start_date = end_date - timedelta(days=days_ago) # Il y a X jours, en UTC
     
     params = {
         "first": num_clips,
-        "started_at": start_date.isoformat() + "Z", # Format ISO 8601 UTC
-        "ended_at": end_date.isoformat() + "Z",
+        "started_at": start_date.strftime('%Y-%m-%dT%H:%M:%SZ'), # Format ISO 8601 sans microsecondes
+        "ended_at": end_date.strftime('%Y-%m-%dT%H:%M:%SZ'),     # Format ISO 8601 sans microsecondes
         "sort": "views" # Tri par nombre de vues
         # Vous pouvez ajouter 'game_id' ou 'broadcaster_id' pour filtrer
         # "game_id": "YOUR_GAME_ID" 
     }
+
+    print(f"Requête API Twitch avec started_at={params['started_at']} et ended_at={params['ended_at']}") # Pour le debug
 
     try:
         response = requests.get(TWITCH_API_URL, headers=headers, params=params)
@@ -84,7 +88,10 @@ def get_top_clips(access_token, num_clips=10, days_ago=1):
         return top_clips
     except requests.exceptions.RequestException as e:
         print(f"❌ Erreur lors de la récupération des clips Twitch : {e}")
-        sys.exit(1)
+        # Affiche la réponse de l'API si elle est disponible pour plus de détails
+        if response.content:
+            print(f"Contenu de la réponse API Twitch: {response.content.decode()}")
+        sys.exit(1) # <-- CORRECTION ici, sys est maintenant importé
 
 if __name__ == "__main__":
     token = get_twitch_access_token()
