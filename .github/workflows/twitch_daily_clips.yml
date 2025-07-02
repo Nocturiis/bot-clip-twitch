@@ -1,0 +1,61 @@
+# .github/workflows/twitch_daily_clips.yml
+name: Twitch Daily Top 10 Clips
+
+on:
+  schedule:
+    # Exécute tous les jours à 00h30 UTC (ajustez l'heure selon quand vous voulez le "best-of" du jour précédent)
+    - cron: '30 0 * * *' 
+  workflow_dispatch: # Permet de déclencher manuellement le workflow
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest # Utilise la dernière version d'Ubuntu
+
+    steps:
+    - name: ⬇️ Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🐍 Set up Python 3.x
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: ⚙️ Install dependencies (yt-dlp, ffmpeg, python)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg # Installation de FFmpeg
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt # Installe les dépendances Python
+
+    - name: 📁 Create data directories
+      run: |
+        mkdir -p data/raw_clips
+        echo "Data directories created."
+
+    - name: 📊 Get Top 10 Twitch Clips
+      env:
+        TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+        TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+      run: python scripts/get_top_clips.py
+
+    - name: 📥 Download Individual Clips
+      run: python scripts/download_clips.py
+
+    - name: 🎬 Compile Video
+      run: python scripts/compile_video.py
+
+    - name: 📝 Generate Metadata and Thumbnail
+      run: python scripts/generate_metadata.py
+
+    - name: 📤 Upload to YouTube
+      env:
+        YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+        YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+        YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+      run: python scripts/upload_youtube.py
+
+    - name: 🧹 Clean up temporary files
+      if: always() # Exécute même si les étapes précédentes échouent
+      run: |
+        rm -rf data/
+        echo "Temporary data directory cleaned."
