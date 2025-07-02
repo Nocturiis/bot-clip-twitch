@@ -25,29 +25,30 @@ OUTPUT_CLIPS_JSON = os.path.join("data", "top_clips.json")
 #   "509670": "Just Chatting" (Très général, souvent en français)
 #   "32982": "Grand Theft Auto V"
 #   "512965": "Valorant"
-#   "21779": "League of Legends"
+#   "21779": "League of of Legends"
 # Ajoutez d'autres IDs de jeux si vous le souhaitez.
 GAME_IDS = ["509670", "32982", "512965", "21779"] # Exemples, à ajuster
 
 # Liste des IDs de streamers francophones populaires.
 # C'est le MEILLEUR moyen de cibler le contenu francophone.
-# Pour trouver l'ID d'un streamer, utilisez l'API Twitch "helix/users?login=NomDuStreamer"
-# (Exemple de requête : https://api.twitch.tv/helix/users?login=squeezie )
-# REMPLACEZ CES EXEMPLES PAR DE VRAIS IDs de streamers francophones populaires
+# Pour trouver l'ID d'un streamer, utilisez le script get_broadcaster_id.py.
 BROADCASTER_IDS = [
-    "52130765",  # Squeezie 
-    "41719107",  # ZeratoR 
-    "24147592",  # Gotaga 
-    "134966333",  # Kameto
-    "737048563" # Anyme023
-    "496105401" # byilhann
-    "887001013" # Nico_la
-    "60256640" # Flamby
-    "253195796" #  helydia
-    "80716629" # Inoxtag
-    "175560856" #Hctuan
+    "52130765",  # Squeezie
+    "41719107",  # ZeratoR
+    "24147592",  # Gotaga
+    "134966333", # Kameto
+    "737048563", # Anyme023 (Correction: ajout de la virgule manquante ici)
+    "496105401", # byilhann
+    "887001013", # Nico_la
+    "60256640",  # Flamby
+    "253195796", # helydia
+    "80716629",  # Inoxtag
+    "175560856"  # Hctuan
     # Ajoutez d'autres IDs de streamers francophones ici
 ]
+
+# PARAMÈTRE POUR LA DURÉE CUMULÉE MINIMALE DE LA VIDÉO FINALE
+MIN_VIDEO_DURATION_SECONDS = 630 # 10 minutes et 30 secondes (10*60 + 30)
 
 # --- IMPORTANT MODIFICATIONS END HERE ---
 
@@ -69,9 +70,10 @@ def get_twitch_access_token():
         print(f"❌ Erreur lors de la récupération du jeton d'accès Twitch : {e}")
         sys.exit(1)
 
-def get_top_clips(access_token, num_clips_per_source=5, days_ago=1):
+# Augmentez num_clips_per_source pour avoir plus de clips à trier pour la durée minimale
+def get_top_clips(access_token, num_clips_per_source=50, days_ago=1): 
     """Fetches the top N clips from Twitch for the last X days for specified games and broadcasters."""
-    print(f"📊 Récupération des {num_clips_per_source} clips Twitch par source (jeu/streamer) pour les dernières {days_ago} jours...")
+    print(f"📊 Récupération d'un maximum de {num_clips_per_source} clips Twitch par source (jeu/streamer) pour les dernières {days_ago} jours...")
     
     headers = {
         "Client-ID": CLIENT_ID,
@@ -82,8 +84,6 @@ def get_top_clips(access_token, num_clips_per_source=5, days_ago=1):
     start_date = end_date - timedelta(days=days_ago)
     
     all_top_clips = []
-
-    # --- NOUVELLE LOGIQUE DE RECHERCHE PAR GAME_ID ET BROADCASTER_ID ---
 
     # Recherche de clips par Game ID
     for game_id in GAME_IDS:
@@ -96,8 +96,6 @@ def get_top_clips(access_token, num_clips_per_source=5, days_ago=1):
             "game_id": game_id
         }
         
-        # print(f"Requête API Twitch avec started_at={params['started_at']} et ended_at={params['ended_at']} pour game_id={game_id}") # Debugging détaillé
-
         try:
             response = requests.get(TWITCH_API_URL, headers=headers, params=params)
             response.raise_for_status()
@@ -105,11 +103,9 @@ def get_top_clips(access_token, num_clips_per_source=5, days_ago=1):
             
             if not clips_data.get("data"):
                 print(f"  ⚠️ Aucune donnée de clip trouvée pour game_id {game_id} dans la période spécifiée.")
-                # print(f"  Réponse complète de l'API Twitch (pas de clips): {json.dumps(clips_data, indent=2)}") # Debugging détaillé
                 continue
 
             for clip in clips_data.get("data", []):
-                # Using .get() with a default value to prevent KeyError and ensure 'views: 0' is not due to missing key
                 all_top_clips.append({
                     "id": clip.get("id"),
                     "url": clip.get("url"),
@@ -119,7 +115,8 @@ def get_top_clips(access_token, num_clips_per_source=5, days_ago=1):
                     "viewer_count": clip.get("viewer_count", 0), # Default to 0 if not present
                     "broadcaster_name": clip.get("broadcaster_name"),
                     "game_name": clip.get("game_name"),
-                    "created_at": clip.get("created_at")
+                    "created_at": clip.get("created_at"),
+                    "duration": float(clip.get("duration", 0.0)) # <-- AJOUTÉ: Assurez-vous que 'duration' est récupéré et converti en float
                 })
             
         except requests.exceptions.RequestException as e:
@@ -139,7 +136,7 @@ def get_top_clips(access_token, num_clips_per_source=5, days_ago=1):
             "started_at": start_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
             "ended_at": end_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
             "sort": "views",
-            "broadcaster_id": broadcaster_id # <-- C'EST ICI QU'ON UTILISE L'ID DU STREAMER
+            "broadcaster_id": broadcaster_id
         }
 
         try:
@@ -161,7 +158,8 @@ def get_top_clips(access_token, num_clips_per_source=5, days_ago=1):
                     "viewer_count": clip.get("viewer_count", 0),
                     "broadcaster_name": clip.get("broadcaster_name"),
                     "game_name": clip.get("game_name"),
-                    "created_at": clip.get("created_at")
+                    "created_at": clip.get("created_at"),
+                    "duration": float(clip.get("duration", 0.0)) # <-- AJOUTÉ: Assurez-vous que 'duration' est récupéré et converti en float
                 })
         except requests.exceptions.RequestException as e:
             print(f"❌ Erreur lors de la récupération des clips Twitch pour broadcaster_id {broadcaster_id} : {e}")
@@ -172,27 +170,63 @@ def get_top_clips(access_token, num_clips_per_source=5, days_ago=1):
             if response.content:
                 print(f"    Contenu brut de la réponse: {response.content.decode()}")
 
-    # --- FIN DE LA NOUVELLE LOGIQUE ---
+    # --- NOUVELLE LOGIQUE DE SÉLECTION BASÉE SUR LA DURÉE ET LES VUES ---
 
-    # Après avoir collecté tous les clips de toutes les sources, triez globalement et prenez le TOP 10.
-    # On trie par 'viewer_count' en s'assurant qu'il y a une valeur par défaut de 0 au cas où.
-    final_clips = sorted(all_top_clips, key=lambda x: x.get('viewer_count', 0), reverse=True)[:10]
+    # Tri global de tous les clips collectés par viewer_count (descendant)
+    sorted_clips_by_views = sorted(all_top_clips, key=lambda x: x.get('viewer_count', 0), reverse=True)
 
-    if not final_clips:
-        print("⚠️ Aucun clip trouvé pour les critères spécifiés sur TOUS les jeux/streamers. Assurez-vous que les IDs sont corrects ou ajustez la période de recherche.")
-        sys.exit(0)
+    final_clips_for_compilation = []
+    current_duration_sum = 0.0 # Utilisez un float pour la somme des durées
+
+    print(f"\nSélection des clips pour atteindre au minimum {MIN_VIDEO_DURATION_SECONDS} secondes ({MIN_VIDEO_DURATION_SECONDS / 60:.2f} minutes)...")
+
+    # Parcourt les clips du plus vu au moins vu
+    for clip in sorted_clips_by_views:
+        clip_duration = float(clip.get('duration', 0.0)) # Assurez-vous que c'est un float
+        
+        # N'ajoutez que des clips qui ont une durée positive
+        if clip_duration > 0: 
+            final_clips_for_compilation.append(clip)
+            current_duration_sum += clip_duration
+            print(f"  Ajouté : '{clip.get('title', 'N/A')}' ({clip_duration:.1f}s, Vues: {clip.get('viewer_count', 0)}). Durée cumulée: {current_duration_sum:.1f}s")
+            
+            # Vérifie si la durée minimale est atteinte ET qu'il y a un nombre suffisant de clips (ex: au moins 3)
+            # pour éviter une compilation d'un seul long clip si le premier suffit.
+            if current_duration_sum >= MIN_VIDEO_DURATION_SECONDS and len(final_clips_for_compilation) >= 3: 
+                print(f"  ✅ Durée minimale ({MIN_VIDEO_DURATION_SECONDS}s) atteinte avec {len(final_clips_for_compilation)} clips.")
+                break # Arrêtez d'ajouter des clips une fois la durée minimale atteinte
+
+    # Si la durée minimale n'est pas atteinte avec tous les clips disponibles, 
+    # mais qu'il y a quand même des clips à compiler.
+    if current_duration_sum < MIN_VIDEO_DURATION_SECONDS and final_clips_for_compilation:
+        print(f"⚠️ ATTENTION: Impossible d'atteindre la durée minimale de {MIN_VIDEO_DURATION_SECONDS} secondes ({MIN_VIDEO_DURATION_SECONDS / 60:.2f} minutes) avec les clips disponibles. Durée finale: {current_duration_sum:.1f}s")
+    
+    # Cas où aucun clip n'a été sélectionné (par exemple, tous ont une durée de 0, ou aucun n'a été trouvé)
+    if not final_clips_for_compilation:
+        print("⚠️ Aucun clip viable n'a été sélectionné pour la compilation (peut-être tous avec durée 0, ou aucun trouvé). Le fichier top_clips.json sera vide.")
+        sys.exit(0) # Sortie normale si aucun clip n'est sélectionnable
+
+    # La liste finale de clips à sauvegarder est celle qui respecte la durée minimale (ou tous les clips valides trouvés)
+    final_clips = final_clips_for_compilation
+
+    # --- DÉBUGGAGE : Affiche les clips finaux avant de les écrire dans le JSON ---
+    print("\n--- CLIPS FINAUX SÉLECTIONNÉS POUR SAUVEGARDE ---")
+    if final_clips:
+        for i, clip in enumerate(final_clips):
+            print(f"{i+1}. Title: {clip.get('title', 'N/A')}, Broadcaster: {clip.get('broadcaster_name', 'N/A')}, Views: {clip.get('viewer_count', 0)}, Duration: {clip.get('duration', 'N/A')}s, URL: {clip.get('url', 'N/A')}")
+    else:
+        print("Aucun clip à sauvegarder.")
+    print("--------------------------------------------------\n")
         
     with open(OUTPUT_CLIPS_JSON, "w", encoding="utf-8") as f:
         json.dump(final_clips, f, ensure_ascii=False, indent=2)
     
-    print(f"✅ {len(final_clips)} clips récupérés et sauvegardés dans {OUTPUT_CLIPS_JSON}")
+    print(f"✅ {len(final_clips)} clips récupérés et sauvegardés dans {OUTPUT_CLIPS_JSON} pour une durée totale de {current_duration_sum:.1f} secondes.")
     return final_clips
 
 if __name__ == "__main__":
     token = get_twitch_access_token()
     if token:
-        # num_clips_per_source: combien de clips on demande par jeu ET par streamer.
-        # Par exemple, si vous avez 3 jeux et 2 streamers, et num_clips_per_source=5,
-        # vous demanderez 5*3=15 clips de jeux + 5*2=10 clips de streamers = 25 clips au total,
-        # parmi lesquels les 10 meilleurs seront sélectionnés.
-        get_top_clips(token, num_clips_per_source=10) # Demande jusqu'à 10 clips par source
+        # num_clips_per_source: Le nombre de clips à demander par requête pour chaque jeu/streamer.
+        # Augmentez ce nombre si vous n'atteignez pas la durée minimale avec votre sélection actuelle de IDs.
+        get_top_clips(token, num_clips_per_source=50)
