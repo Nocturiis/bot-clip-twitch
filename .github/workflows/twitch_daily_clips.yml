@@ -26,9 +26,7 @@ jobs:
         sudo apt-get install -y ffmpeg # Installation de FFmpeg
         python -m pip install --upgrade pip
         pip install -r requirements.txt # Installe les dépendances Python
-
-    - name: Install Python dependencies for thumbnail generation
-      run: pip install Pillow
+        pip install Pillow # <-- AJOUTÉ ICI : Installation de Pillow pour la génération de miniatures
 
     - name: 📁 Create data directories
       run: |
@@ -44,20 +42,14 @@ jobs:
     - name: 📥 Download Individual Clips
       run: python scripts/download_clips.py
 
-    # --- DÉBUT DE L'ÉTAPE DE DÉBOGAGE TEMPORAIRE ---
-    - name: 🐛 Debug - Show downloaded_clip_paths.json content
-      run: |
-        echo "Contenu de downloaded_clip_paths.json :"
-        cat data/downloaded_clip_paths.json
-        echo "--- Fin du contenu ---"
-    # --- FIN DE L'ÉTAPE DE DÉBOGAGE TEMPORAIRE ---
-
     - name: 🎬 Compile Video
       run: python scripts/compile_video.py
 
-    - name: 📝 Generate Metadata and Thumbnail
-      # Assurez-vous que le nom du script est correct (si c'est generate_metadata.py ou generate_metadata_thumbnail.py)
+    - name: 📝 Generate Metadata
       run: python scripts/generate_metadata.py 
+
+    - name: 🏞️ Generate Custom Thumbnail # <-- NOUVELLE ÉTAPE POUR LA MINIATURE
+      run: python scripts/generate_thumbnail.py
 
     - name: 📤 Upload to YouTube
       env:
