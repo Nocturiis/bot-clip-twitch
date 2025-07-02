@@ -27,7 +27,37 @@ OUTPUT_CLIPS_JSON = os.path.join("data", "top_clips.json")
 #   "512965": "Valorant"
 #   "21779": "League of of Legends"
 # Ajoutez d'autres IDs de jeux si vous le souhaitez.
-GAME_IDS = ["509670", "32982", "512965", "21779"] # Exemples, à ajuster
+GAME_IDS = [
+    "509670",       # Just Chatting
+    "21779",        # League of Legends
+    "32982",        # Grand Theft Auto V
+    "512965",       # VALORANT
+    "518018",       # Minecraft
+    "513143",       # Fortnite
+    "32399",        # Counter-Strike
+    "511224",       # Apex Legends
+    "506520",       # Dota 2
+    "490422",       # Dead by Daylight
+    "514873",       # Call of Duty: Warzone
+    "65768",        # Rocket League
+    "518883",       # EA Sports FC 24
+    "180025139",    # Mario Kart 8 Deluxe
+    "280721",       # Teamfight Tactics
+    "488427",       # World of Warcraft
+    "1467408070",   # Rust
+    "32213",        # Hearthstone
+    "138585",       # Chess
+    "493306",       # Overwatch 2
+    "509660",       # Special Events
+    "1063683693",   # Pokémon Scarlet and Violet
+    "1678120671",   # Baldur's Gate 3
+    "27471",        # osu!
+    "507316",       # Phasmophobia
+    "19326",        # The Elder Scrolls V: Skyrim
+    "512710",       # Fall Guys
+    "1285324545",   # Lethal Company
+    # Ajoutez d'autres IDs si nécessaire
+]
 
 # Liste des IDs de streamers francophones populaires.
 # C'est le MEILLEUR moyen de cibler le contenu francophone.
@@ -43,8 +73,36 @@ BROADCASTER_IDS = [
     "60256640",  # Flamby
     "253195796", # helydia
     "80716629",  # Inoxtag
-    "175560856"  # Hctuan
-    # Ajoutez d'autres IDs de streamers francophones ici
+    "175560856",  # Hctuan
+    "737048563",    # AmineMaTue
+    "57404419",     # Ponce
+    "38038890",     # Antoine Daniel
+    "48480373",     # MisterMV
+    "19075728",     # Sardoche
+    "54546583",     # Locklear
+    "50290500",     # Domingo
+    "57402636",     # RebeuDeter
+    "47565457",     # Joyca
+    "153066440",    # Michou
+    "31429949",     # LeBouseuh
+    "46296316",     # Maghla
+    "49896798",     # Chowh1
+    "49749557",     # Jiraya
+    "53696803",     # Wankil Studio (Laink et Terracid)
+    "51950294",     # Mynthos
+    "53140510",     # Etoiles
+    "23616654",     # Gotaga 
+    "72366922",     # Laink (Wankil Studio, mais l'ID de la chaîne principale est plus sûr)
+    "31289086", # WankilStudio
+    "129845722",    # Terracid (Wankil Studio, ID de chaîne principale)
+    "134812328",    # LittleBigWhale
+    "180237751",    # Mister V (rappel, ceci est l'ID de sa chaîne Twitch, différente de celle de MisterMV)
+    "22245231",     # SqueezieLive (sa chaîne secondaire pour le live)
+    "55787682",     # Shaunz
+    "142436402",    # Ultia
+    "20875990",     # LCK_France (pour les clips de la ligue de LoL française)
+    "47672152",     # Sardoche
+    # ... ajoutez d'autres IDs vérifiés ici ...
 ]
 
 # PARAMÈTRE POUR LA DURÉE CUMULÉE MINIMALE DE LA VIDÉO FINALE
@@ -70,7 +128,7 @@ def get_twitch_access_token():
         print(f"❌ Erreur lors de la récupération du jeton d'accès Twitch : {e}")
         sys.exit(1)
 
-def get_top_clips(access_token, num_clips_per_source=50, days_ago=3): # Augmenté days_ago à 3 par défaut pour plus de chances
+def get_top_clips(access_token, num_clips_per_source=100, days_ago=3): # Augmenté days_ago à 3 par défaut pour plus de chances
     """Fetches the top N clips from Twitch for the last X days for specified games and broadcasters."""
     print(f"📊 Récupération d'un maximum de {num_clips_per_source} clips Twitch par source (jeu/streamer) pour les dernières {days_ago} jours...")
     
