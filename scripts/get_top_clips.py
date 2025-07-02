@@ -102,7 +102,7 @@ BROADCASTER_IDS = [
 # PARAMÈTRE POUR LA DURÉE CUMULÉE MINIMALE DE LA VIDÉO FINALE
 MIN_VIDEO_DURATION_SECONDS = 630 # 10 minutes et 30 secondes (10*60 + 30)
 
-# --- FIN DES PARAMÈTRES ---
+# --- IMPORTANT MODIFICATIONS END HERE ---
 
 def get_twitch_access_token():
     """Gets an application access token for Twitch API."""
@@ -122,9 +122,10 @@ def get_twitch_access_token():
         print(f"❌ Erreur lors de la récupération du jeton d'accès Twitch : {e}")
         sys.exit(1)
 
-def get_top_clips(access_token, num_clips_per_source=100, days_ago=3):
-    """Fetches clips from Twitch, prioritizing by broadcaster list order, then by views."""
-    print(f"📊 Récupération de clips Twitch pour les {days_ago} derniers jours, priorité par Broadcaster ID et ensuite par Game ID.")
+# Augmentez num_clips_per_source pour avoir plus de clips à trier pour la durée minimale
+def get_top_clips(access_token, num_clips_per_source=50, days_ago=1): 
+    """Fetches the top N clips from Twitch for the last X days for specified games and broadcasters."""
+    print(f"📊 Récupération d'un maximum de {num_clips_per_source} clips Twitch par source (jeu/streamer) pour les dernières {days_ago} jours...")
     
     headers = {
         "Client-ID": CLIENT_ID,
@@ -134,61 +135,9 @@ def get_top_clips(access_token, num_clips_per_source=100, days_ago=3):
     end_date = datetime.now(timezone.utc)
     start_date = end_date - timedelta(days=days_ago)
     
-    # Dictionnaire pour stocker tous les clips uniques par leur ID
-    all_unique_clips = {}
-    
-    # Première phase: Récupération et stockage des clips par Broadcaster ID
-    print("\n--- Phase 1: Récupération par Broadcaster ID (Prioritaire) ---")
-    for broadcaster_id in BROADCASTER_IDS:
-        print(f"  - Recherche de clips pour le broadcaster_id: {broadcaster_id}")
-        params = {
-            "first": num_clips_per_source,
-            "started_at": start_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
-            "ended_at": end_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
-            "sort": "views", 
-            "broadcaster_id": broadcaster_id,
-            "language": "fr"
-        }
-        try:
-            response = requests.get(TWITCH_API_URL, headers=headers, params=params)
-            response.raise_for_status()
-            clips_data = response.json().get("data", [])
-            
-            if not clips_data:
-                print(f"    ⚠️ Aucune donnée de clip trouvée pour broadcaster_id {broadcaster_id}.")
-                continue
+    all_top_clips = []
 
-            # Ajout des clips à notre collection unique, en filtrant immédiatement par langue et qualité
-            for clip in clips_data:
-                if clip.get('language') == 'fr' and not clip.get('title', '').startswith('NUMBERz') and float(clip.get('duration', 0.0)) > 0:
-                    # Ajoute broadcaster_id au clip pour le tri futur
-                    clip_info = {
-                        "id": clip.get("id"),
-                        "url": clip.get("url"),
-                        "embed_url": clip.get("embed_url"),
-                        "thumbnail_url": clip.get("thumbnail_url"),
-                        "title": clip.get("title"),
-                        "viewer_count": clip.get("viewer_count", 0),
-                        "broadcaster_name": clip.get("broadcaster_name"),
-                        "broadcaster_id": clip.get("broadcaster_id"), # Ajoutez ceci
-                        "game_name": clip.get("game_name"),
-                        "created_at": clip.get("created_at"),
-                        "duration": float(clip.get("duration", 0.0)),
-                        "language": clip.get("language")
-                    }
-                    all_unique_clips[clip['id']] = clip_info
-            print(f"    Collecté {len(clips_data)} clips (uniques et pertinents: {len(all_unique_clips)}).")
-        except requests.exceptions.RequestException as e:
-            print(f"❌ Erreur lors de la récupération des clips Twitch pour broadcaster_id {broadcaster_id} : {e}")
-            if hasattr(e, 'response') and e.response is not None:
-                print(f"    Contenu de la réponse API Twitch: {e.response.content.decode()}")
-        except json.JSONDecodeError as e:
-            print(f"❌ Erreur de décodage JSON pour broadcaster_id {broadcaster_id}: {e}")
-            if hasattr(response, 'content') and response.content is not None:
-                print(f"    Contenu brut de la réponse: {response.content.decode()}")
-
-    # Deuxième phase: Récupération et stockage des clips par Game ID
-    print("\n--- Phase 2: Récupération par Game ID (Complémentaire) ---")
+    # Recherche de clips par Game ID
     for game_id in GAME_IDS:
         print(f"  - Recherche de clips pour le game_id: {game_id}")
         params = {
@@ -196,111 +145,127 @@ def get_top_clips(access_token, num_clips_per_source=100, days_ago=3):
             "started_at": start_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
             "ended_at": end_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
             "sort": "views",
-            "game_id": game_id,
-            "language": "fr"
+            "game_id": game_id
         }
+        
         try:
             response = requests.get(TWITCH_API_URL, headers=headers, params=params)
             response.raise_for_status()
-            clips_data = response.json().get("data", [])
+            clips_data = response.json()
             
-            if not clips_data:
-                print(f"    ⚠️ Aucune donnée de clip trouvée pour game_id {game_id}.")
+            if not clips_data.get("data"):
+                print(f"  ⚠️ Aucune donnée de clip trouvée pour game_id {game_id} dans la période spécifiée.")
                 continue
 
-            # Ajout des clips à notre collection unique, filtrant immédiatement
-            for clip in clips_data:
-                if clip.get('language') == 'fr' and not clip.get('title', '').startswith('NUMBERz') and float(clip.get('duration', 0.0)) > 0:
-                    # Ajoute broadcaster_id au clip pour le tri futur (même s'il vient d'un game_id)
-                    clip_info = {
-                        "id": clip.get("id"),
-                        "url": clip.get("url"),
-                        "embed_url": clip.get("embed_url"),
-                        "thumbnail_url": clip.get("thumbnail_url"),
-                        "title": clip.get("title"),
-                        "viewer_count": clip.get("viewer_count", 0),
-                        "broadcaster_name": clip.get("broadcaster_name"),
-                        "broadcaster_id": clip.get("broadcaster_id"), # Ajoutez ceci
-                        "game_name": clip.get("game_name"),
-                        "created_at": clip.get("created_at"),
-                        "duration": float(clip.get("duration", 0.0)),
-                        "language": clip.get("language")
-                    }
-                    all_unique_clips[clip['id']] = clip_info
-            print(f"    Collecté {len(clips_data)} clips (uniques et pertinents: {len(all_unique_clips)}).")
+            for clip in clips_data.get("data", []):
+                all_top_clips.append({
+                    "id": clip.get("id"),
+                    "url": clip.get("url"),
+                    "embed_url": clip.get("embed_url"),
+                    "thumbnail_url": clip.get("thumbnail_url"),
+                    "title": clip.get("title"),
+                    "viewer_count": clip.get("viewer_count", 0), # Default to 0 if not present
+                    "broadcaster_name": clip.get("broadcaster_name"),
+                    "game_name": clip.get("game_name"),
+                    "created_at": clip.get("created_at"),
+                    "duration": float(clip.get("duration", 0.0)) # <-- AJOUTÉ: Assurez-vous que 'duration' est récupéré et converti en float
+                })
+            
         except requests.exceptions.RequestException as e:
             print(f"❌ Erreur lors de la récupération des clips Twitch pour game_id {game_id} : {e}")
-            if hasattr(e, 'response') and e.response is not None:
-                print(f"    Contenu de la réponse API Twitch: {e.response.content.decode()}")
+            if response.content:
+                print(f"    Contenu de la réponse API Twitch: {response.content.decode()}")
         except json.JSONDecodeError as e:
             print(f"❌ Erreur de décodage JSON pour game_id {game_id}: {e}")
-            if hasattr(response, 'content') and response.content is not None:
+            if response.content:
                 print(f"    Contenu brut de la réponse: {response.content.decode()}")
 
-    # --- Phase 3: Construction de la compilation finale avec l'ordre de priorité souhaité ---
-    print("\n--- Phase 3: Construction de la compilation finale (Priorisation par Broadcaster ID) ---")
+    # Recherche de clips par Broadcaster ID
+    for broadcaster_id in BROADCASTER_IDS:
+        print(f"  - Recherche de clips pour le broadcaster_id: {broadcaster_id}")
+        params = {
+            "first": num_clips_per_source,
+            "started_at": start_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
+            "ended_at": end_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
+            "sort": "views",
+            "broadcaster_id": broadcaster_id
+        }
+
+        try:
+            response = requests.get(TWITCH_API_URL, headers=headers, params=params)
+            response.raise_for_status()
+            clips_data = response.json()
+
+            if not clips_data.get("data"):
+                print(f"  ⚠️ Aucune donnée de clip trouvée pour broadcaster_id {broadcaster_id} dans la période spécifiée.")
+                continue
+
+            for clip in clips_data.get("data", []):
+                all_top_clips.append({
+                    "id": clip.get("id"),
+                    "url": clip.get("url"),
+                    "embed_url": clip.get("embed_url"),
+                    "thumbnail_url": clip.get("thumbnail_url"),
+                    "title": clip.get("title"),
+                    "viewer_count": clip.get("viewer_count", 0),
+                    "broadcaster_name": clip.get("broadcaster_name"),
+                    "game_name": clip.get("game_name"),
+                    "created_at": clip.get("created_at"),
+                    "duration": float(clip.get("duration", 0.0)) # <-- AJOUTÉ: Assurez-vous que 'duration' est récupéré et converti en float
+                })
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Erreur lors de la récupération des clips Twitch pour broadcaster_id {broadcaster_id} : {e}")
+            if response.content:
+                print(f"    Contenu de la réponse API Twitch: {response.content.decode()}")
+        except json.JSONDecodeError as e:
+            print(f"❌ Erreur de décodage JSON pour broadcaster_id {broadcaster_id}: {e}")
+            if response.content:
+                print(f"    Contenu brut de la réponse: {response.content.decode()}")
+
+    # --- NOUVELLE LOGIQUE DE SÉLECTION BASÉE SUR LA DURÉE ET LES VUES ---
+
+    # Tri global de tous les clips collectés par viewer_count (descendant)
+    sorted_clips_by_views = sorted(all_top_clips, key=lambda x: x.get('viewer_count', 0), reverse=True)
 
     final_clips_for_compilation = []
-    current_duration_sum = 0.0
+    current_duration_sum = 0.0 # Utilisez un float pour la somme des durées
 
-    # Créer un pool de clips modifiable pour piocher dedans
-    current_clip_pool = list(all_unique_clips.values())
-    
-    # Liste pour stocker les clips dans l'ordre final désiré
-    ordered_clips_for_selection = []
+    print(f"\nSélection des clips pour atteindre au minimum {MIN_VIDEO_DURATION_SECONDS} secondes ({MIN_VIDEO_DURATION_SECONDS / 60:.2f} minutes)...")
 
-    # 1. Prioriser les clips des broadcasters dans l'ordre de BROADCASTER_IDS
-    for priority_broadcaster_id in BROADCASTER_IDS:
-        # Filtrer les clips de ce broadcaster
-        broadcaster_clips = [
-            clip for clip in current_clip_pool 
-            if clip.get('broadcaster_id') == priority_broadcaster_id
-        ]
+    # Parcourt les clips du plus vu au moins vu
+    for clip in sorted_clips_by_views:
+        clip_duration = float(clip.get('duration', 0.0)) # Assurez-vous que c'est un float
         
-        # Trier ces clips par vues (le plus populaire de ce streamer d'abord)
-        broadcaster_clips_sorted = sorted(broadcaster_clips, key=lambda x: x.get('viewer_count', 0), reverse=True)
-        
-        # Ajouter les clips triés de ce streamer à la liste ordonnée
-        ordered_clips_for_selection.extend(broadcaster_clips_sorted)
-        
-        # Retirer ces clips du pool pour ne pas les traiter à nouveau
-        current_clip_pool = [
-            clip for clip in current_clip_pool 
-            if clip.get('broadcaster_id') != priority_broadcaster_id
-        ]
+        # N'ajoutez que des clips qui ont une durée positive
+        if clip_duration > 0: 
+            final_clips_for_compilation.append(clip)
+            current_duration_sum += clip_duration
+            print(f"  Ajouté : '{clip.get('title', 'N/A')}' ({clip_duration:.1f}s, Vues: {clip.get('viewer_count', 0)}). Durée cumulée: {current_duration_sum:.1f}s")
+            
+            # Vérifie si la durée minimale est atteinte ET qu'il y a un nombre suffisant de clips (ex: au moins 3)
+            # pour éviter une compilation d'un seul long clip si le premier suffit.
+            if current_duration_sum >= MIN_VIDEO_DURATION_SECONDS and len(final_clips_for_compilation) >= 3: 
+                print(f"  ✅ Durée minimale ({MIN_VIDEO_DURATION_SECONDS}s) atteinte avec {len(final_clips_for_compilation)} clips.")
+                break # Arrêtez d'ajouter des clips une fois la durée minimale atteinte
 
-    # 2. Ajouter les clips restants (ceux des GAME_IDS ou autres broadcasters non listés)
-    # Ils seront triés par vues car c'est la seule priorité restante
-    remaining_clips_sorted_by_views = sorted(current_clip_pool, key=lambda x: x.get('viewer_count', 0), reverse=True)
-    ordered_clips_for_selection.extend(remaining_clips_sorted_by_views)
-
-    # 3. Sélection finale des clips pour atteindre la durée minimale
-    for clip in ordered_clips_for_selection:
-        clip_duration = clip.get('duration', 0.0)
-        
-        final_clips_for_compilation.append(clip)
-        current_duration_sum += clip_duration
-        print(f"  Ajouté : '{clip.get('title', 'N/A')}' par {clip.get('broadcaster_name', 'N/A')} ({clip_duration:.1f}s, Vues: {clip.get('viewer_count', 0)}, Langue: {clip.get('language')}). Durée cumulée: {current_duration_sum:.1f}s")
-        
-        # Vérifie si la durée minimale est atteinte ET qu'il y a un nombre suffisant de clips (ex: au moins 3)
-        if current_duration_sum >= MIN_VIDEO_DURATION_SECONDS and len(final_clips_for_compilation) >= 3: 
-            print(f"  ✅ Durée minimale ({MIN_VIDEO_DURATION_SECONDS}s) atteinte avec {len(final_clips_for_compilation)} clips.")
-            break 
-
+    # Si la durée minimale n'est pas atteinte avec tous les clips disponibles, 
+    # mais qu'il y a quand même des clips à compiler.
     if current_duration_sum < MIN_VIDEO_DURATION_SECONDS and final_clips_for_compilation:
-        print(f"⚠️ ATTENTION: Impossible d'atteindre la durée minimale de {MIN_VIDEO_DURATION_SECONDS} secondes ({MIN_VIDEO_DURATION_SECONDS / 60:.2f} minutes) avec les clips francophones pertinents disponibles. Durée finale: {current_duration_sum:.1f}s")
+        print(f"⚠️ ATTENTION: Impossible d'atteindre la durée minimale de {MIN_VIDEO_DURATION_SECONDS} secondes ({MIN_VIDEO_DURATION_SECONDS / 60:.2f} minutes) avec les clips disponibles. Durée finale: {current_duration_sum:.1f}s")
     
+    # Cas où aucun clip n'a été sélectionné (par exemple, tous ont une durée de 0, ou aucun n'a été trouvé)
     if not final_clips_for_compilation:
-        print("❌ Aucun clip francophone viable n'a été sélectionné pour la compilation. Le fichier top_clips.json sera vide.")
-        sys.exit(0) 
+        print("⚠️ Aucun clip viable n'a été sélectionné pour la compilation (peut-être tous avec durée 0, ou aucun trouvé). Le fichier top_clips.json sera vide.")
+        sys.exit(0) # Sortie normale si aucun clip n'est sélectionnable
 
+    # La liste finale de clips à sauvegarder est celle qui respecte la durée minimale (ou tous les clips valides trouvés)
     final_clips = final_clips_for_compilation
 
     # --- DÉBUGGAGE : Affiche les clips finaux avant de les écrire dans le JSON ---
     print("\n--- CLIPS FINAUX SÉLECTIONNÉS POUR SAUVEGARDE ---")
     if final_clips:
         for i, clip in enumerate(final_clips):
-            print(f"{i+1}. Title: {clip.get('title', 'N/A')}, Broadcaster: {clip.get('broadcaster_name', 'N/A')}, Views: {clip.get('viewer_count', 0)}, Duration: {clip.get('duration', 'N/A')}s, Language: {clip.get('language', 'N/A')}, URL: {clip.get('url', 'N/A')}")
+            print(f"{i+1}. Title: {clip.get('title', 'N/A')}, Broadcaster: {clip.get('broadcaster_name', 'N/A')}, Views: {clip.get('viewer_count', 0)}, Duration: {clip.get('duration', 'N/A')}s, URL: {clip.get('url', 'N/A')}")
     else:
         print("Aucun clip à sauvegarder.")
     print("--------------------------------------------------\n")
@@ -314,4 +279,6 @@ def get_top_clips(access_token, num_clips_per_source=100, days_ago=3):
 if __name__ == "__main__":
     token = get_twitch_access_token()
     if token:
-        get_top_clips(token, num_clips_per_source=100, days_ago=3)
+        # num_clips_per_source: Le nombre de clips à demander par requête pour chaque jeu/streamer.
+        # Augmentez ce nombre si vous n'atteignez pas la durée minimale avec votre sélection actuelle de IDs.
+        get_top_clips(token, num_clips_per_source=50)
