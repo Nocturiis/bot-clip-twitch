@@ -17,7 +17,7 @@ TWITCH_API_URL = "https://api.twitch.tv/helix/clips"
 
 OUTPUT_CLIPS_JSON = os.path.join("data", "top_clips.json")
 
-# --- IMPORTANT MODIFICATIONS START HERE ---
+# --- PARAMÈTRES DE FILTRAGE ET DE SÉLECTION ---
 
 # Liste des IDs de jeux pour lesquels vous voulez récupérer des clips.
 # Vous pouvez trouver les IDs de jeux en utilisant l'API Twitch "helix/games?name=NomDuJeu".
@@ -37,7 +37,7 @@ BROADCASTER_IDS = [
     "41719107",  # ZeratoR
     "24147592",  # Gotaga
     "134966333", # Kameto
-    "737048563", # Anyme023 (Correction: ajout de la virgule manquante ici)
+    "737048563", # Anyme023
     "496105401", # byilhann
     "887001013", # Nico_la
     "60256640",  # Flamby
@@ -50,7 +50,7 @@ BROADCASTER_IDS = [
 # PARAMÈTRE POUR LA DURÉE CUMULÉE MINIMALE DE LA VIDÉO FINALE
 MIN_VIDEO_DURATION_SECONDS = 630 # 10 minutes et 30 secondes (10*60 + 30)
 
-# --- IMPORTANT MODIFICATIONS END HERE ---
+# --- FIN DES PARAMÈTRES ---
 
 def get_twitch_access_token():
     """Gets an application access token for Twitch API."""
@@ -70,8 +70,7 @@ def get_twitch_access_token():
         print(f"❌ Erreur lors de la récupération du jeton d'accès Twitch : {e}")
         sys.exit(1)
 
-# Augmentez num_clips_per_source pour avoir plus de clips à trier pour la durée minimale
-def get_top_clips(access_token, num_clips_per_source=50, days_ago=1): 
+def get_top_clips(access_token, num_clips_per_source=50, days_ago=3): # Augmenté days_ago à 3 par défaut pour plus de chances
     """Fetches the top N clips from Twitch for the last X days for specified games and broadcasters."""
     print(f"📊 Récupération d'un maximum de {num_clips_per_source} clips Twitch par source (jeu/streamer) pour les dernières {days_ago} jours...")
     
@@ -93,7 +92,8 @@ def get_top_clips(access_token, num_clips_per_source=50, days_ago=1):
             "started_at": start_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
             "ended_at": end_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
             "sort": "views",
-            "game_id": game_id
+            "game_id": game_id,
+            "language": "fr" # <-- AJOUT CLÉ ICI POUR FILTRER PAR LANGUE
         }
         
         try:
@@ -106,19 +106,21 @@ def get_top_clips(access_token, num_clips_per_source=50, days_ago=1):
                 continue
 
             for clip in clips_data.get("data", []):
-                all_top_clips.append({
-                    "id": clip.get("id"),
-                    "url": clip.get("url"),
-                    "embed_url": clip.get("embed_url"),
-                    "thumbnail_url": clip.get("thumbnail_url"),
-                    "title": clip.get("title"),
-                    "viewer_count": clip.get("viewer_count", 0), # Default to 0 if not present
-                    "broadcaster_name": clip.get("broadcaster_name"),
-                    "game_name": clip.get("game_name"),
-                    "created_at": clip.get("created_at"),
-                    "duration": float(clip.get("duration", 0.0)) # <-- AJOUTÉ: Assurez-vous que 'duration' est récupéré et converti en float
-                })
-            
+                # Ajout d'une vérification explicite de la langue au cas où l'API renverrait des choses non "fr"
+                if clip.get('language') == 'fr':
+                    all_top_clips.append({
+                        "id": clip.get("id"),
+                        "url": clip.get("url"),
+                        "embed_url": clip.get("embed_url"),
+                        "thumbnail_url": clip.get("thumbnail_url"),
+                        "title": clip.get("title"),
+                        "viewer_count": clip.get("viewer_count", 0),
+                        "broadcaster_name": clip.get("broadcaster_name"),
+                        "game_name": clip.get("game_name"),
+                        "created_at": clip.get("created_at"),
+                        "duration": float(clip.get("duration", 0.0)),
+                        "language": clip.get("language") # Garder la langue pour le débogage/vérification
+                    })
         except requests.exceptions.RequestException as e:
             print(f"❌ Erreur lors de la récupération des clips Twitch pour game_id {game_id} : {e}")
             if response.content:
@@ -136,7 +138,8 @@ def get_top_clips(access_token, num_clips_per_source=50, days_ago=1):
             "started_at": start_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
             "ended_at": end_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
             "sort": "views",
-            "broadcaster_id": broadcaster_id
+            "broadcaster_id": broadcaster_id,
+            "language": "fr" # <-- AJOUT CLÉ ICI POUR FILTRER PAR LANGUE
         }
 
         try:
@@ -149,18 +152,21 @@ def get_top_clips(access_token, num_clips_per_source=50, days_ago=1):
                 continue
 
             for clip in clips_data.get("data", []):
-                all_top_clips.append({
-                    "id": clip.get("id"),
-                    "url": clip.get("url"),
-                    "embed_url": clip.get("embed_url"),
-                    "thumbnail_url": clip.get("thumbnail_url"),
-                    "title": clip.get("title"),
-                    "viewer_count": clip.get("viewer_count", 0),
-                    "broadcaster_name": clip.get("broadcaster_name"),
-                    "game_name": clip.get("game_name"),
-                    "created_at": clip.get("created_at"),
-                    "duration": float(clip.get("duration", 0.0)) # <-- AJOUTÉ: Assurez-vous que 'duration' est récupéré et converti en float
-                })
+                # Ajout d'une vérification explicite de la langue au cas où l'API renverrait des choses non "fr"
+                if clip.get('language') == 'fr':
+                    all_top_clips.append({
+                        "id": clip.get("id"),
+                        "url": clip.get("url"),
+                        "embed_url": clip.get("embed_url"),
+                        "thumbnail_url": clip.get("thumbnail_url"),
+                        "title": clip.get("title"),
+                        "viewer_count": clip.get("viewer_count", 0),
+                        "broadcaster_name": clip.get("broadcaster_name"),
+                        "game_name": clip.get("game_name"),
+                        "created_at": clip.get("created_at"),
+                        "duration": float(clip.get("duration", 0.0)),
+                        "language": clip.get("language") # Garder la langue pour le débogage/vérification
+                    })
         except requests.exceptions.RequestException as e:
             print(f"❌ Erreur lors de la récupération des clips Twitch pour broadcaster_id {broadcaster_id} : {e}")
             if response.content:
@@ -170,10 +176,10 @@ def get_top_clips(access_token, num_clips_per_source=50, days_ago=1):
             if response.content:
                 print(f"    Contenu brut de la réponse: {response.content.decode()}")
 
-    # --- NOUVELLE LOGIQUE DE SÉLECTION BASÉE SUR LA DURÉE ET LES VUES ---
-
-    # Tri global de tous les clips collectés par viewer_count (descendant)
-    sorted_clips_by_views = sorted(all_top_clips, key=lambda x: x.get('viewer_count', 0), reverse=True)
+    # Filtrer les doublons (par ID de clip)
+    unique_clips = {clip['id']: clip for clip in all_top_clips}.values()
+    # Trier globalement tous les clips collectés par viewer_count (descendant)
+    sorted_clips_by_views = sorted(list(unique_clips), key=lambda x: x.get('viewer_count', 0), reverse=True)
 
     final_clips_for_compilation = []
     current_duration_sum = 0.0 # Utilisez un float pour la somme des durées
@@ -182,13 +188,14 @@ def get_top_clips(access_token, num_clips_per_source=50, days_ago=1):
 
     # Parcourt les clips du plus vu au moins vu
     for clip in sorted_clips_by_views:
-        clip_duration = float(clip.get('duration', 0.0)) # Assurez-vous que c'est un float
+        clip_duration = float(clip.get('duration', 0.0))
         
-        # N'ajoutez que des clips qui ont une durée positive
-        if clip_duration > 0: 
+        # Filtres supplémentaires pour la qualité du clip et la langue (même si déjà demandé à l'API)
+        # Exclure les clips avec des titres génériques/de test ("NUMBERz") et s'assurer que la durée est positive
+        if clip_duration > 0 and clip.get('language') == 'fr' and not clip.get('title', '').startswith('NUMBERz'):
             final_clips_for_compilation.append(clip)
             current_duration_sum += clip_duration
-            print(f"  Ajouté : '{clip.get('title', 'N/A')}' ({clip_duration:.1f}s, Vues: {clip.get('viewer_count', 0)}). Durée cumulée: {current_duration_sum:.1f}s")
+            print(f"  Ajouté : '{clip.get('title', 'N/A')}' par {clip.get('broadcaster_name', 'N/A')} ({clip_duration:.1f}s, Vues: {clip.get('viewer_count', 0)}, Langue: {clip.get('language')}). Durée cumulée: {current_duration_sum:.1f}s")
             
             # Vérifie si la durée minimale est atteinte ET qu'il y a un nombre suffisant de clips (ex: au moins 3)
             # pour éviter une compilation d'un seul long clip si le premier suffit.
@@ -196,14 +203,14 @@ def get_top_clips(access_token, num_clips_per_source=50, days_ago=1):
                 print(f"  ✅ Durée minimale ({MIN_VIDEO_DURATION_SECONDS}s) atteinte avec {len(final_clips_for_compilation)} clips.")
                 break # Arrêtez d'ajouter des clips une fois la durée minimale atteinte
 
-    # Si la durée minimale n'est pas atteinte avec tous les clips disponibles, 
-    # mais qu'il y a quand même des clips à compiler.
+    # Si la durée minimale n'est pas atteinte avec tous les clips disponibles,
+    # mais qu'il y a quand même des clips à compiler, on peut décider de prendre tous les clips valides trouvés.
     if current_duration_sum < MIN_VIDEO_DURATION_SECONDS and final_clips_for_compilation:
-        print(f"⚠️ ATTENTION: Impossible d'atteindre la durée minimale de {MIN_VIDEO_DURATION_SECONDS} secondes ({MIN_VIDEO_DURATION_SECONDS / 60:.2f} minutes) avec les clips disponibles. Durée finale: {current_duration_sum:.1f}s")
+        print(f"⚠️ ATTENTION: Impossible d'atteindre la durée minimale de {MIN_VIDEO_DURATION_SECONDS} secondes ({MIN_VIDEO_DURATION_SECONDS / 60:.2f} minutes) avec les clips francophones pertinents disponibles. Durée finale: {current_duration_sum:.1f}s")
     
-    # Cas où aucun clip n'a été sélectionné (par exemple, tous ont une durée de 0, ou aucun n'a été trouvé)
+    # Cas où aucun clip francophone viable n'a été sélectionné
     if not final_clips_for_compilation:
-        print("⚠️ Aucun clip viable n'a été sélectionné pour la compilation (peut-être tous avec durée 0, ou aucun trouvé). Le fichier top_clips.json sera vide.")
+        print("❌ Aucun clip francophone viable n'a été sélectionné pour la compilation. Le fichier top_clips.json sera vide.")
         sys.exit(0) # Sortie normale si aucun clip n'est sélectionnable
 
     # La liste finale de clips à sauvegarder est celle qui respecte la durée minimale (ou tous les clips valides trouvés)
@@ -213,7 +220,7 @@ def get_top_clips(access_token, num_clips_per_source=50, days_ago=1):
     print("\n--- CLIPS FINAUX SÉLECTIONNÉS POUR SAUVEGARDE ---")
     if final_clips:
         for i, clip in enumerate(final_clips):
-            print(f"{i+1}. Title: {clip.get('title', 'N/A')}, Broadcaster: {clip.get('broadcaster_name', 'N/A')}, Views: {clip.get('viewer_count', 0)}, Duration: {clip.get('duration', 'N/A')}s, URL: {clip.get('url', 'N/A')}")
+            print(f"{i+1}. Title: {clip.get('title', 'N/A')}, Broadcaster: {clip.get('broadcaster_name', 'N/A')}, Views: {clip.get('viewer_count', 0)}, Duration: {clip.get('duration', 'N/A')}s, Language: {clip.get('language', 'N/A')}, URL: {clip.get('url', 'N/A')}")
     else:
         print("Aucun clip à sauvegarder.")
     print("--------------------------------------------------\n")
@@ -229,4 +236,5 @@ if __name__ == "__main__":
     if token:
         # num_clips_per_source: Le nombre de clips à demander par requête pour chaque jeu/streamer.
         # Augmentez ce nombre si vous n'atteignez pas la durée minimale avec votre sélection actuelle de IDs.
-        get_top_clips(token, num_clips_per_source=50)
+        # days_ago: Définit sur combien de jours en arrière rechercher les clips. Augmentez si le volume est faible.
+        get_top_clips(token, num_clips_per_source=100, days_ago=3) # Recommandé: 100 clips par source, 3 jours
