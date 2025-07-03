@@ -30,8 +30,9 @@ def download_clips():
         clip_url = clip["url"]
         
         clip_id = clip.get("id", f"unknown_id_{i}")
-        clip_title = clip.get("title", "Titre inconnu").replace("'", "\\'") # Escape single quotes for FFmpeg
-        broadcaster_name = clip.get("broadcaster_name", "Streamer inconnu").replace("'", "\\'") # Escape single quotes for FFmpeg
+        # Escape single quotes and colons for FFmpeg drawtext filter
+        clip_title = clip.get("title", "Titre inconnu").replace("'", "\\'").replace(":", "\\:")
+        broadcaster_name = clip.get("broadcaster_name", "Streamer inconnu").replace("'", "\\'").replace(":", "\\:")
 
         raw_output_filename = os.path.join(RAW_CLIPS_DIR, f"clip_raw_{clip_id}.mp4") # Store raw download
         processed_output_filename = os.path.join(PROCESSED_CLIPS_DIR, f"clip_processed_{clip_id}.mp4") # Store processed version
@@ -51,36 +52,49 @@ def download_clips():
             # 2. Prétraitement avec FFmpeg pour normaliser le format, les codecs et ajouter du texte
             print(f"  Prétraitement du clip {i+1}/{len(clips)}: {clip_title} (ajout du texte)...")
             
-            # Text to display: Title and Broadcaster name
-            # Escape commas in text for FFmpeg filter
-            display_text = f"Titre: {clip_title}, Streamer: {broadcaster_name}".replace(",", "\,")
+            # Text for title and streamer
+            title_text = f"Titre: {clip_title}"
+            broadcaster_text = f"Streamer: {broadcaster_name}"
 
             # FFmpeg filtergraph for scaling, padding, FPS, and drawing text
-            # We'll use a standard font like 'Arial' or a generic 'sans-serif' if Arial is not guaranteed
-            # 'x=(w-text_w)/2': Centers text horizontally
-            # 'y=H*0.05': Places text at 5% from the top
-            # 'fontcolor=white': White text color
-            # 'bordercolor=black': Black border for readability
-            # 'borderw=2': Border width
-            # 'fontsize=40': Adjust font size as needed (e.g., 40 for 1080p video)
-            # 'enable=between(t,0,5)': Show text for the first 5 seconds of the clip
+            # We'll use a standard font like 'LiberationSans'
+            # Positioning:
+            # Title: Top-center, slightly down from the very top
+            # Streamer: Below the title, with a small margin
             
-            # Note: FFmpeg on GitHub Actions runners usually has 'LiberationSans' or 'DejaVuSans' available.
-            # Let's use 'LiberationSans' as a common choice. If it doesn't work, we can try 'DejaVuSans' or generic 'sans-serif'.
-            text_filter = (
-                f"drawtext=fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf:" # Common path for a standard font
-                f"text='{display_text}':"
-                f"x=(w-text_w)/2:y=H*0.05:"
-                f"fontcolor=white:fontsize=40:bordercolor=black:borderw=2:"
-                f"enable='between(t,0,5)'" # Show text for first 5 seconds
+            # Font settings
+            font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf" # Common path for a standard font
+            font_size = 36 # Slightly smaller for two lines, adjust as needed
+            text_color = "white"
+            border_color = "black"
+            border_width = 2
+
+            # Drawtext filter for the title
+            title_filter = (
+                f"drawtext=fontfile='{font_path}':"
+                f"text='{title_text}':"
+                f"x=(w-text_w)/2:y=H*0.04:" # 4% from top
+                f"fontcolor={text_color}:fontsize={font_size}:"
+                f"bordercolor={border_color}:borderw={border_width}"
             )
             
-            # Combine the video filters: scaling/padding/fps AND drawtext
+            # Drawtext filter for the broadcaster name, positioned below the title
+            broadcaster_filter = (
+                f"drawtext=fontfile='{font_path}':"
+                f"text='{broadcaster_text}':"
+                f"x=(w-text_w)/2:y=H*0.04+text_h+5:" # Below title + 5 pixels margin
+                f"fontcolor={text_color}:fontsize={font_size}:"
+                f"bordercolor={border_color}:borderw={border_width}"
+            )
+            
+            # Combine all video filters: scaling/padding/fps AND both drawtext filters
+            # We chain the drawtext filters using commas
             video_filters = (
                 "scale=1920:1080:force_original_aspect_ratio=decrease,"
                 "pad=1920:1080:(ow-iw)/2:(oh-ih)/2,"
                 "setsar=1,fps=30,"
-                f"{text_filter}" # Add the drawtext filter here
+                f"{title_filter}," # Add the title drawtext filter
+                f"{broadcaster_filter}" # Add the broadcaster drawtext filter
             )
 
             ffmpeg_preprocess_command = [
