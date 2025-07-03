@@ -15,7 +15,10 @@ from googleapiclient.http import MediaFileUpload
 # Scopes requis pour l'upload de vidéo
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
-COMPILED_VIDEO_PATH = os.path.join("data", "compiled_video.mp4")
+# --- MODIFICATION ICI : Mise à jour du chemin de la vidéo compilée ---
+COMPILED_VIDEO_PATH = os.path.join("output", "compiled_video.mp4") # Anciennement data/
+# --- FIN DE LA MODIFICATION ---
+
 THUMBNAIL_PATH = os.path.join("data", "thumbnail.jpg")
 METADATA_JSON_PATH = os.path.join("data", "video_metadata.json") # CORRIGÉ
 
@@ -31,8 +34,8 @@ def upload_video():
 
     # --- DÉBUT DES MODIFICATIONS POUR LE TITRE ---
     original_title = metadata["title"]
-    description = metadata["description"]
-    tags = metadata["tags"]
+    description = metadata["description"] # La description est lue mais n'est pas modifiée ici
+    tags = metadata["tags"] # Les tags sont lus mais ne sont pas modifiés ici
     
     # Nettoyage et troncation du titre
     today_date_fr = datetime.now().strftime("%d %B") # Ex: "02 juillet"
@@ -55,7 +58,8 @@ def upload_video():
 
     # Si le titre nettoyé est trop long, le tronquer intelligemment
     if len(cleaned_title) > max_clip_title_length_allowed:
-        truncated_clip_title = cleaned_title[:max_clip_title_length_allowed - 3].strip() # -3 pour "..."
+        # Tronquer et ajouter "..."
+        truncated_clip_title = cleaned_title[:max_clip_title_length_allowed - 3].strip() 
         # S'assurer qu'on ne coupe pas un mot en plein milieu
         last_space = truncated_clip_title.rfind(' ')
         if last_space != -1:
@@ -101,7 +105,7 @@ def upload_video():
     except Exception as e:
         print(f"❌ Échec du rafraîchissement du jeton d'accès : {e}")
         print("Vérifiez YOUTUBE_REFRESH_TOKEN, YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET et la validité du token.")
-        sys.exit(1)
+        sys.exit(1) # Conserver sys.exit(1) ici car c'est une erreur d'authentification critique
         
 
     # Construire le service YouTube
@@ -110,8 +114,8 @@ def upload_video():
     # 3. Préparer la vidéo et la miniature
     if not os.path.exists(COMPILED_VIDEO_PATH):
         print(f"❌ Fichier vidéo compilée '{COMPILED_VIDEO_PATH}' introuvable.")
-        sys.exit(1)
-    
+        sys.exit(1) # Conserver sys.exit(1) ici car la vidéo est essentielle
+
     thumbnail_present = False
     if os.path.exists(THUMBNAIL_PATH):
         thumbnail_present = True
@@ -164,7 +168,9 @@ def upload_video():
         return True
     except Exception as e:
         print(f"❌ ERREUR lors de l'upload sur YouTube : {e}")
-        sys.exit(1)
+        # sys.exit(1) # <--- COMMENTÉ pour permettre au workflow de continuer et de préserver les artefacts
+        print("La vidéo compilée a été conservée dans le dossier 'output/' si cette étape a été atteinte.")
+        return False # Retourne False pour indiquer un échec d'upload sans arrêter le processus Python
 
 if __name__ == "__main__":
     upload_video()
