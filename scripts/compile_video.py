@@ -19,6 +19,13 @@ REPO_ROOT = os.getcwd() # CWD est correct dans un contexte GitHub Actions
 
 def compile_video():
     print("🎬 Démarrage de la compilation des clips vidéo...")
+
+    # --- NOUVELLE AJOUTATION ICI : Création du dossier 'output' ---
+    output_dir = os.path.dirname(OUTPUT_VIDEO_PATH)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"Dossier de sortie créé : {output_dir}")
+    # --- FIN DE L'AJOUTATION ---
     
     if not os.path.exists(INPUT_PATHS_JSON):
         print(f"❌ Fichier des chemins de clips téléchargés '{INPUT_PATHS_JSON}' introuvable.")
@@ -102,12 +109,11 @@ def compile_video():
     print(f"Exécution de la commande FFmpeg (réencodage): {' '.join(command)}")
 
     try:
-        # Exécuter la commande depuis le répertoire racine du dépôt
         process = subprocess.run(command, check=True, cwd=REPO_ROOT, capture_output=True, text=True) 
         print(f"✅ Vidéo compilée avec succès : {OUTPUT_VIDEO_PATH}")
         print("FFmpeg STDOUT:\n", process.stdout)
         if process.stderr:
-            print("FFmpeg STDERR:\n", process.stderr) # Imprime le stderr même en cas de succès pour le debug
+            print("FFmpeg STDERR:\n", process.stderr)
 
     except subprocess.CalledProcessError as e:
         print(f"❌ Erreur lors de la compilation vidéo : {e}")
