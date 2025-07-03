@@ -4,7 +4,7 @@ name: Twitch Daily Top 10 Clips
 on:
   schedule:
     # Exécute tous les jours à 00h30 UTC (ajustez l'heure selon quand vous voulez le "best-of" du jour précédent)
-    - cron: '0 15 * * *'  
+    - cron: '0 15 * * *'  # This cron job will run daily at 15:00 UTC (which is 17:00 CEST in Herve)
   workflow_dispatch: # Permet de déclencher manuellement le workflow
 
 jobs:
@@ -26,12 +26,13 @@ jobs:
         sudo apt-get install -y ffmpeg # Installation de FFmpeg
         python -m pip install --upgrade pip
         pip install -r requirements.txt # Installe les dépendances Python
-        pip install Pillow # <-- AJOUTÉ ICI : Installation de Pillow pour la génération de miniatures
 
     - name: 📁 Create data directories
       run: |
         mkdir -p data/raw_clips
-        echo "Data directories created."
+        # Also create the 'output' directory which compile_video.py now uses
+        mkdir -p output 
+        echo "Data and output directories created."
 
     - name: 📊 Get Top 10 Twitch Clips
       env:
@@ -45,11 +46,18 @@ jobs:
     - name: 🎬 Compile Video
       run: python scripts/compile_video.py
 
-    - name: 📝 Generate Metadata
-      run: python scripts/generate_metadata.py 
+    # --- NOUVELLE ÉTAPE : Upload de la vidéo compilée en tant qu'artefact ---
+    - name: ⬆️ Upload Compiled Video as Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: compiled-twitch-video # Name of the artifact
+        path: output/compiled_video.mp4 # Path to the video to be archived
+        retention-days: 1 # How many days the artifact should be kept (adjust as needed)
+        if-no-files-found: ignore # Do not fail the step if the file is not found
+    # --- FIN DE LA NOUVELLE ÉTAPE ---
 
-    - name: 🏞️ Generate Custom Thumbnail # <-- NOUVELLE ÉTAPE POUR LA MINIATURE
-      run: python scripts/generate_thumbnail.py
+    - name: 📝 Generate Metadata and Thumbnail
+      run: python scripts/generate_metadata.py
 
     - name: 📤 Upload to YouTube
       env:
@@ -57,9 +65,13 @@ jobs:
         YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
         YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
       run: python scripts/upload_youtube.py
+      # continue-on-error: true # Consider adding this if you want subsequent steps to run even if YouTube upload fails (e.g., for cleanup)
 
     - name: 🧹 Clean up temporary files
       if: always() # Exécute même si les étapes précédentes échouent
       run: |
         rm -rf data/
-        echo "Temporary data directory cleaned."
+        # Also remove the 'output' directory if you don't need to keep the video in the runner's workspace
+        # If you're relying on artifacts, keeping it here is redundant.
+        rm -rf output/ 
+        echo "Temporary data and output directories cleaned."
