@@ -2,10 +2,30 @@ import subprocess
 import os
 import json
 import sys
+import re # Importation pour les expressions régulières
 
 INPUT_CLIPS_JSON = os.path.join("data", "top_clips.json")
 RAW_CLIPS_DIR = os.path.join("data", "raw_clips") # Keep original downloads here
 PROCESSED_CLIPS_DIR = os.path.join("data", "processed_clips") # New directory for consistent clips
+
+def get_video_duration(filepath):
+    """
+    Obtient la durée d'une vidéo en secondes en utilisant ffprobe.
+    Retourne 0.0 si la durée ne peut pas être déterminée.
+    """
+    try:
+        cmd = [
+            "ffprobe",
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            filepath
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return float(result.stdout.strip())
+    except (subprocess.CalledProcessError, ValueError) as e:
+        print(f"  ⚠️ Impossible d'obtenir la durée de {filepath} avec ffprobe: {e}")
+        return 0.0
 
 def download_clips():
     print("📥 Démarrage du téléchargement et du prétraitement des clips Twitch individuels...")
@@ -26,23 +46,20 @@ def download_clips():
         print("⚠️ Aucun clip à télécharger. La liste des clips est vide.")
         with open(os.path.join("data", "downloaded_clip_paths.json"), "w") as f:
             json.dump([], f)
-        # N'appelle pas sys.exit(0) ici, car cela arrêterait le workflow avant compile_video
-        # qui doit pouvoir gérer un downloaded_clip_paths.json vide et afficher son propre message.
         return
 
-    downloaded_and_processed_files = [] # Will store paths to the PROCESSED clips
+    downloaded_and_processed_info = [] # Will store dicts with path, id, and actual duration
     for i, clip in enumerate(clips):
         clip_url = clip["url"]
         
         clip_id = clip.get("id", f"unknown_id_{i}")
         # Escape single quotes and colons for FFmpeg drawtext filter
+        # Utilisez re.escape pour une meilleure robustesse, mais attention aux doubles échappements si déjà fait
         clip_title = clip.get("title", "Titre inconnu").replace("'", "'\\''")
         broadcaster_name = clip.get("broadcaster_name", "Streamer inconnu").replace("'", "'\\''")
 
-        # --- CORRECTION ICI : Modifier le nom du fichier pour inclure l'ID au début ---
         raw_output_filename = os.path.join(RAW_CLIPS_DIR, f"{clip_id}_raw.mp4")
         processed_output_filename = os.path.join(PROCESSED_CLIPS_DIR, f"{clip_id}_processed.mp4")
-        # --- FIN DE LA CORRECTION ---
         
         print(f"Téléchargement du clip {i+1}/{len(clips)}: {clip_title} par {broadcaster_name} (ID: {clip_id})...")
         try:
@@ -63,17 +80,12 @@ def download_clips():
             broadcaster_display = f"Streamer: {broadcaster_name}"
 
             # Font settings - Ensure this font is available in your GitHub Actions runner or provide its path
-            # For robustness, consider providing fallback fonts or installing a common one in your workflow.
-            # 'LiberationSans' or 'DejaVuSans' are often available on Linux runners.
             font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf" 
-            # Fallback to DejaVuSans if LiberationSans is not found (common on GitHub Actions)
             if not os.path.exists(font_path):
                 font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Regular.ttf"
                 if not os.path.exists(font_path):
-                    # As a last resort, just use the font name if FFmpeg can resolve it, but it's less reliable
                     font_path = "sans-serif" # Generic font family name for FFmpeg
                     print(f"⚠️ Police spécifique non trouvée. Utilisation d'une police générique '{font_path}'.")
-
 
             font_size = 36
             text_color = "white"
@@ -122,7 +134,19 @@ def download_clips():
             ]
             subprocess.run(ffmpeg_preprocess_command, check=True, capture_output=True, text=True)
             print(f"  ✅ Clip prétraité avec texte: {processed_output_filename}")
-            downloaded_and_processed_files.append(processed_output_filename)
+
+            # --- NOUVEAU : Obtenir la durée réelle du clip traité ---
+            actual_duration = get_video_duration(processed_output_filename)
+            print(f"  Durée réelle du clip traité: {actual_duration:.2f} secondes.")
+            # --- FIN NOUVEAU ---
+
+            downloaded_and_processed_info.append({
+                "id": clip_id,
+                "path": processed_output_filename,
+                "duration": actual_duration, # Utilise la durée réelle
+                "title": clip.get("title", "Titre inconnu"), # Ajoute le titre et le streamer pour faciliter
+                "broadcaster_name": clip.get("broadcaster_name", "Streamer inconnu")
+            })
 
         except subprocess.CalledProcessError as e:
             print(f"  ❌ Erreur lors du traitement du clip {clip_url} (téléchargement ou prétraitement): {e}")
@@ -131,9 +155,9 @@ def download_clips():
         except Exception as e:
             print(f"  ❌ Erreur inattendue lors du traitement du clip {clip_url}: {e}")
 
-    # Sauvegarde la liste des fichiers TÉLÉCHARGÉS ET PRÉTRAITÉS pour le script de compilation
+    # Sauvegarde la liste des informations complètes des clips téléchargés et prétraités
     with open(os.path.join("data", "downloaded_clip_paths.json"), "w") as f:
-        json.dump(downloaded_and_processed_files, f)
+        json.dump(downloaded_and_processed_info, f, ensure_ascii=False, indent=2)
     
     print("✅ Téléchargement et prétraitement des clips terminé.")
 

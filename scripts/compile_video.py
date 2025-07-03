@@ -7,14 +7,10 @@ from datetime import datetime, timedelta
 # --- Chemins des fichiers ---
 INPUT_PATHS_JSON = os.path.join("data", "downloaded_clip_paths.json")
 OUTPUT_VIDEO_PATH = os.path.join("output", "compiled_video.mp4")
-CLIPS_METADATA_JSON = os.path.join("data", "top_clips.json") # Pour lire les métadonnées et durées
+# CLIPS_METADATA_JSON n'est plus la source principale des durées ici
 CLIPS_LIST_TXT = os.path.join("data", "clips_list.txt") # Utilisé pour concaténation initiale
 
 # --- PARAMÈTRES FFmpeg ---
-# Chemin de la police à utiliser pour les timecodes.
-# Assurez-vous que ce fichier de police existe dans l'environnement d'exécution (ex: GitHub Actions)
-# Pour une police par défaut, tu peux essayer 'Arial' ou 'DejaVuSans' si elles sont disponibles.
-# Sinon, tu devras ajouter une étape à ton workflow pour télécharger et installer une police.
 FONT_PATH = "DejaVuSans" # Exemple : Chemin vers une police TTF ou nom de police système
 
 # --- NOUVEAU PARAMÈTRE : Limite le nombre total de clips dans la compilation finale ---
@@ -39,38 +35,25 @@ def compile_video():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
         print(f"Dossier de sortie créé : {output_dir}")
-    
+        
     if not os.path.exists(INPUT_PATHS_JSON):
         print(f"❌ Fichier des chemins de clips téléchargés '{INPUT_PATHS_JSON}' introuvable.")
         sys.exit(1)
 
-    if not os.path.exists(CLIPS_METADATA_JSON):
-        print(f"❌ Fichier de métadonnées des clips '{CLIPS_METADATA_JSON}' introuvable. Nécessaire pour la sélection finale et les timecodes.")
-        sys.exit(1)
-
+    # Lire les informations des clips téléchargés et prétraités (incluant la durée réelle)
     with open(INPUT_PATHS_JSON, "r") as f:
-        downloaded_clip_paths_raw = json.load(f)
+        downloaded_clip_info = json.load(f)
 
-    with open(CLIPS_METADATA_JSON, "r", encoding="utf-8") as f:
-        top_clips_metadata = json.load(f)
-
-    if not downloaded_clip_paths_raw or not top_clips_metadata:
-        print("⚠️ Aucune vidéo téléchargée ou aucune métadonnée à compiler. Fin de l'étape de compilation.")
+    if not downloaded_clip_info:
+        print("⚠️ Aucune information de vidéo téléchargée à compiler. Fin de l'étape de compilation.")
         sys.exit(0)
 
-    # Filtrer downloaded_clip_paths_raw et s'assurer que l'ordre correspond à top_clips_metadata
+    # Filtrer et limiter les clips à traiter
     final_clips_to_process = []
-    downloaded_clip_map = {os.path.basename(p).split('_')[0]: p for p in downloaded_clip_paths_raw}
-    
-    for clip_meta in top_clips_metadata[:MAX_TOTAL_CLIPS]: # Limite ici aussi pour la sélection des métadonnées
-        clip_id = clip_meta['id']
-        if clip_id in downloaded_clip_map:
-            final_clips_to_process.append({
-                "path": os.path.join(REPO_ROOT, downloaded_clip_map[clip_id]),
-                "duration": clip_meta.get('duration', 0.0),
-                "title": clip_meta.get('title', 'Clip inconnu'),
-                "broadcaster_name": clip_meta.get('broadcaster_name', 'Streamer inconnu')
-            })
+    for clip_data in downloaded_clip_info:
+        # Assurez-vous que le clip a un chemin et une durée valide
+        if clip_data.get("path") and clip_data.get("duration", 0.0) > 0:
+            final_clips_to_process.append(clip_data)
         if len(final_clips_to_process) >= MAX_TOTAL_CLIPS:
             break
 
@@ -81,14 +64,13 @@ def compile_video():
     print(f"Compilation de {len(final_clips_to_process)} clips (max {MAX_TOTAL_CLIPS} clips).")
 
     # --- Étape 1: Concaténation initiale (rapide) sans réencodage ---
-    # Cette étape est toujours utile pour combiner les vidéos sans traitement coûteux.
-    # Les timecodes et l'audio seront traités après.
     temp_concat_video_path = os.path.join(output_dir, "temp_concat_video_no_audio.mp4")
     temp_concat_audio_path = os.path.join(output_dir, "temp_concat_audio.aac")
 
     # Crée le fichier de liste pour la concaténation
     with open(CLIPS_LIST_TXT, "w") as f:
         for clip_info in final_clips_to_process:
+            # Assurez-vous que le chemin est absolu ou relatif au répertoire de travail de FFmpeg
             f.write(f"file '{clip_info['path']}'\n")
 
     concat_video_command = [
@@ -113,9 +95,8 @@ def compile_video():
     audio_inputs_cmd = []
     for clip_info in final_clips_to_process:
         audio_inputs_cmd.extend(["-i", clip_info['path']])
-    
+        
     # Création de la chaîne de filtre complex pour l'audio
-    # Concaténation de tous les flux audio, puis normalisation avec loudnorm
     audio_filter_complex = ""
     if len(final_clips_to_process) > 1:
         audio_filter_complex = "".join([f"[{i}:a]" for i in range(len(final_clips_to_process))])
@@ -145,40 +126,35 @@ def compile_video():
         sys.exit(1)
 
     # --- Étape 3: Application des timecodes sur la vidéo concaténée et fusion avec l'audio ---
-    # Nous devons réencoder ici pour appliquer le filtre drawtext.
-    
     drawtext_filters = []
     current_offset = 0.0
     for clip_info in final_clips_to_process:
         start_time_str = format_duration(current_offset)
-        end_time_str = format_duration(current_offset + clip_info['duration'])
+        # Utilise la durée réelle du clip obtenue de downloaded_clip_paths.json
+        clip_duration = clip_info.get('duration', 0.0) 
         
         # Le texte à afficher : Timecode + Titre du clip + Nom du streamer
+        # Assurez-vous que title et broadcaster_name sont bien échappés si nécessaire,
+        # mais ils le sont déjà dans download_clips.py avant d'être écrits dans le JSON.
         text_content = f"{start_time_str} - {clip_info['title']} par {clip_info['broadcaster_name']}"
-        # Échapper les caractères spéciaux pour FFmpeg (ex: apostrophes)
         escaped_text = text_content.replace("'", "'\\''") 
         
-        # Filtre drawtext pour chaque segment de clip
-        # Il y a plusieurs façons d'écrire ces filtres. Voici une approche simple pour des timecodes qui apparaissent au début de chaque clip.
-        # Le texte s'affiche pendant les 5 premières secondes du clip.
         drawtext_filters.append(
             f"drawtext="
             f"fontfile='{FONT_PATH}':"
             f"text='{escaped_text}':"
-            f"x=(w-text_w)/2:" # Centré horizontalement
-            f"y=h-th-20:"     # 20 pixels du bas
-            f"fontsize=36:"   # Taille de la police
+            f"x=(w-text_w)/2:"
+            f"y=h-th-20:"
+            f"fontsize=36:"
             f"fontcolor=white:"
-            f"box=1:"         # Fond opaque
-            f"boxcolor=black@0.6:" # Couleur du fond avec opacité
-            f"enable='between(t,{current_offset},{current_offset + min(clip_info['duration'], 5)})'" # Affiche le texte pendant les 5 premières secondes ou la durée du clip
+            f"box=1:"
+            f"boxcolor=black@0.6:"
+            f"enable='between(t,{current_offset},{current_offset + min(clip_duration, 5)})'"
         )
-        current_offset += clip_info['duration']
+        current_offset += clip_duration # Utilise la durée réelle pour l'offset
 
-    # La chaîne de filtre complexe pour tous les drawtext
     video_filter_complex = ",".join(drawtext_filters)
 
-    # Commande FFmpeg pour ajouter les timecodes et fusionner avec l'audio
     final_command = [
         "ffmpeg",
         "-i", temp_concat_video_path, # Vidéo concaténée (sans audio)

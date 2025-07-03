@@ -20,7 +20,7 @@ def get_font(size):
     font_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", # Linux (souvent sur GitHub Actions)
         "/System/Library/Fonts/Supplemental/Arial Bold.ttf",    # macOS
-        "C:/Windows/Fonts/arialbd.ttf"                         # Windows
+        "C:/Windows/Fonts/arialbd.ttf"                          # Windows
     ]
     for path in font_paths:
         if os.path.exists(path):
@@ -28,7 +28,7 @@ def get_font(size):
                 return ImageFont.truetype(path, size)
             except IOError:
                 continue # Essayer le chemin suivant si la police est corrompue ou illisible
-    
+            
     # Si aucune police TrueType n'est trouvée/utilisable, charge la police par défaut de Pillow
     print("⚠️ Aucune police TrueType trouvée. Utilisation de la police par défaut de Pillow.")
     return ImageFont.load_default()
@@ -53,17 +53,19 @@ def download_image(url):
         return None
 
 def generate_thumbnail():
-    print("🏞️ Génération de la miniature personnalisée...")
+    print("🏞️ Démarrage de la génération de la miniature personnalisée...")
 
-    # Assurez-vous que le dossier 'output' existe si OUTPUT_THUMBNAIL_PATH le contient
-    output_dir = os.path.dirname(OUTPUT_THUMBNAIL_PATH)
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-        print(f"Dossier de sortie créé : {output_dir}")
+    # Assurez-vous que le dossier 'data' existe pour la miniature finale
+    data_dir = os.path.dirname(OUTPUT_THUMBNAIL_PATH)
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir)
+        print(f"Dossier de données créé : {data_dir}")
 
     if not os.path.exists(INPUT_CLIPS_JSON):
         print(f"❌ Erreur: Le fichier '{INPUT_CLIPS_JSON}' est introuvable. Assurez-vous que la récupération des clips a réussi.")
-        exit(1)
+        # Générer une miniature par défaut si le fichier source est manquant
+        generate_default_thumbnail("Fichier de clips introuvable.")
+        return # Ne pas utiliser sys.exit(1) ici pour permettre au workflow de continuer
 
     with open(INPUT_CLIPS_JSON, "r", encoding="utf-8") as f:
         clips_data = json.load(f)
@@ -74,23 +76,10 @@ def generate_thumbnail():
 
     if not clips_data:
         print("⚠️ Aucune donnée de clip à traiter. Le fichier top_clips.json est vide. Génération d'une miniature par défaut.")
-        empty_thumbnail = Image.new('RGB', (THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT), color = 'black')
-        draw = ImageDraw.Draw(empty_thumbnail)
-        
-        font = get_font(40)
-        text = f"Aucun clip trouvé pour aujourd'hui ({date_str})."
-        # Utiliser textbbox pour un calcul de taille plus précis avec Pillow 9.0+
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_width = bbox[2] - bbox[0]
-        text_height = bbox[3] - bbox[1]
-
-        draw.text(((THUMBNAIL_WIDTH - text_width) / 2, (THUMBNAIL_HEIGHT - text_height) / 2), text, font=font, fill=(255, 255, 255))
-        empty_thumbnail.save(OUTPUT_THUMBNAIL_PATH)
-        print(f"✅ Miniature par défaut générée et sauvegardée dans {OUTPUT_THUMBNAIL_PATH}.")
-        exit(0) # Sortie propre si aucun clip n'est trouvé
+        generate_default_thumbnail(f"Aucun clip trouvé pour aujourd'hui ({date_str}).")
+        return # Ne pas utiliser sys.exit(0) ici
 
     # Sélectionner les 4 premières vignettes uniques pour éviter les doublons
-    # Utiliser un set pour suivre les URLs déjà ajoutées
     selected_thumbnail_urls = []
     seen_urls = set()
     for clip in clips_data:
@@ -102,18 +91,9 @@ def generate_thumbnail():
             break
 
     if not selected_thumbnail_urls:
-        print("⚠️ Aucune URL de vignette valide trouvée dans les données des clips. Impossible de créer la miniature. Génération d'une miniature noire.")
-        empty_thumbnail = Image.new('RGB', (THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT), color = 'black')
-        draw = ImageDraw.Draw(empty_thumbnail)
-        font = get_font(40)
-        text = f"Aucune vignette disponible ({date_str})."
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_width = bbox[2] - bbox[0]
-        text_height = bbox[3] - bbox[1]
-        draw.text(((THUMBNAIL_WIDTH - text_width) / 2, (THUMBNAIL_HEIGHT - text_height) / 2), text, font=font, fill=(255, 255, 255))
-        empty_thumbnail.save(OUTPUT_THUMBNAIL_PATH)
-        print(f"✅ Miniature noire générée et sauvegardée dans {OUTPUT_THUMBNAIL_PATH}.")
-        exit(0)
+        print("⚠️ Aucune URL de vignette valide trouvée dans les données des clips. Impossible de créer la miniature basée sur les clips. Génération d'une miniature par défaut.")
+        generate_default_thumbnail(f"Aucune vignette disponible ({date_str}).")
+        return # Ne pas utiliser sys.exit(0) ici
 
     # Créer l'image finale vide
     final_image = Image.new('RGB', (THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT), color=(0, 0, 0)) # Initialiser avec du noir pour les zones non remplies
@@ -123,10 +103,10 @@ def generate_thumbnail():
     quadrant_height = THUMBNAIL_HEIGHT // 2
 
     positions = [
-        (0, 0),                            # Top-left
-        (quadrant_width, 0),               # Top-right
-        (0, quadrant_height),              # Bottom-left
-        (quadrant_width, quadrant_height)  # Bottom-right
+        (0, 0),                                 # Top-left
+        (quadrant_width, 0),                    # Top-right
+        (0, quadrant_height),                   # Bottom-left
+        (quadrant_width, quadrant_height)       # Bottom-right
     ]
 
     downloaded_images = []
@@ -134,7 +114,7 @@ def generate_thumbnail():
         img = download_image(url)
         if img:
             downloaded_images.append(img)
-    
+        
     # Remplir avec des images noires si moins de 4 images ont été téléchargées
     while len(downloaded_images) < 4:
         # Créer une image noire de la taille du quadrant pour combler
@@ -153,10 +133,8 @@ def generate_thumbnail():
             logo = Image.open(LOGO_PATH).convert("RGBA") # Garder le canal alpha pour la transparence
             
             # Redimensionner le logo pour qu'il ne dépasse pas une certaine proportion
-            # Par exemple, le logo ne devrait pas être plus large que 40% de la largeur de la miniature
-            # et pas plus haut que 40% de la hauteur de la miniature. Ajustez selon le design.
-            target_logo_width = int(THUMBNAIL_WIDTH * 1) 
-            target_logo_height = int(THUMBNAIL_HEIGHT * 1)
+            target_logo_width = int(THUMBNAIL_WIDTH * 0.4) # 40% de la largeur de la miniature
+            target_logo_height = int(THUMBNAIL_HEIGHT * 0.4) # 40% de la hauteur de la miniature
             
             # Calculer le ratio pour redimensionner le logo sans déformer
             logo_ratio = min(target_logo_width / logo.width, target_logo_height / logo.height)
@@ -176,8 +154,32 @@ def generate_thumbnail():
         print(f"⚠️ Fichier logo introuvable à {LOGO_PATH}. La miniature sera générée sans logo.")
 
     # Sauvegarder la miniature finale
-    final_image.save(OUTPUT_THUMBNAIL_PATH)
-    print(f"✅ Miniature générée et sauvegardée dans {OUTPUT_THUMBNAIL_PATH}")
+    try:
+        final_image.save(OUTPUT_THUMBNAIL_PATH)
+        print(f"✅ Miniature générée et sauvegardée avec succès dans {OUTPUT_THUMBNAIL_PATH}")
+    except Exception as e:
+        print(f"❌ Erreur lors de la sauvegarde de la miniature finale : {e}")
+
+def generate_default_thumbnail(message):
+    """Génère une miniature par défaut avec un message."""
+    print(f"Génération d'une miniature par défaut : {message}")
+    default_thumbnail = Image.new('RGB', (THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT), color = 'black')
+    draw = ImageDraw.Draw(default_thumbnail)
+    
+    font = get_font(40)
+    # Utiliser textbbox pour un calcul de taille plus précis avec Pillow 9.0+
+    bbox = draw.textbbox((0, 0), message, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+
+    draw.text(((THUMBNAIL_WIDTH - text_width) / 2, (THUMBNAIL_HEIGHT - text_height) / 2), message, font=font, fill=(255, 255, 255))
+    
+    try:
+        default_thumbnail.save(OUTPUT_THUMBNAIL_PATH)
+        print(f"✅ Miniature par défaut générée et sauvegardée dans {OUTPUT_THUMBNAIL_PATH}.")
+    except Exception as e:
+        print(f"❌ Erreur lors de la sauvegarde de la miniature par défaut : {e}")
+
 
 if __name__ == "__main__":
     generate_thumbnail()

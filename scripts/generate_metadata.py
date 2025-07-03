@@ -1,17 +1,16 @@
 import os
 import json
-from datetime import datetime, timedelta
+from datetime import timedelta
 
-# Mappage des noms de mois en français pour une robustesse maximale
-MOIS_FRANCAIS = {
-    1: "janvier", 2: "février", 3: "mars", 4: "avril",
-    5: "mai", 6: "juin", 7: "juillet", 8: "août",
-    9: "septembre", 10: "octobre", 11: "novembre", 12: "décembre"
-}
-
-INPUT_CLIPS_JSON = os.path.join("data", "top_clips.json")
+# --- Chemins des fichiers ---
+DOWNLOADED_CLIPS_INFO_JSON = os.path.join("data", "downloaded_clip_paths.json") # Nouvelle source
 OUTPUT_METADATA_JSON = os.path.join("data", "video_metadata.json")
 
+# --- Paramètres de la vidéo YouTube ---
+VIDEO_TITLE_PREFIX = "Les Meilleurs Clips Twitch FR du Jour"
+VIDEO_TAGS = ["Twitch", "Clips", "Highlights", "Gaming", "France", "Français", "Best Of", "Drôle"]
+
+# --- Fonctions utilitaires ---
 def format_duration(seconds):
     """Formate une durée en secondes en HH:MM:SS."""
     if seconds < 0:
@@ -22,83 +21,82 @@ def format_duration(seconds):
     return f"{hours:02}:{minutes:02}:{seconds:02}"
 
 def generate_metadata():
-    print("📝 Génération des métadonnées de la vidéo...")
-    
-    if not os.path.exists(INPUT_CLIPS_JSON):
-        print(f"❌ Erreur: Le fichier '{INPUT_CLIPS_JSON}' est introuvable. Assurez-vous que la récupération des clips a réussi.")
-        exit(1)
+    print("📝 Génération des métadonnées vidéo (titre, description, tags)...")
 
-    with open(INPUT_CLIPS_JSON, "r", encoding="utf-8") as f:
-        clips_data = json.load(f)
-
-    # Récupérer la date actuelle
-    today_date = datetime.now() 
-    day = today_date.day
-    month_fr = MOIS_FRANCAIS[today_date.month]
-    year = today_date.year
-
-    if not clips_data:
-        print("⚠️ Aucune donnée de clip à traiter. Le fichier top_clips.json est vide.")
-        
-        # Le titre par défaut utilise la date en français
-        default_title = f"TOP TWITCH CLIPS FR - {day} {month_fr.capitalize()}" # Capitaliser le mois pour le titre par défaut
-        
-        video_metadata = {
-            "title": default_title,
-            "description": f"Désolé, aucune compilation de clips disponible pour aujourd'hui ({day} {month_fr} {year}). Revenez demain !",
-            "tags": ["Twitch", "Clips", "BestOf", "Gaming", "Highlights", "Compilation", "FR", "Francophone"],
-            "categoryId": "20",
-            "privacyStatus": "unlisted" # Mettre en "unlisted" si la vidéo est vide
-        }
+    if not os.path.exists(DOWNLOADED_CLIPS_INFO_JSON):
+        print(f"❌ Fichier des informations de clips téléchargés '{DOWNLOADED_CLIPS_INFO_JSON}' introuvable.")
+        print("Impossible de générer les métadonnées sans les clips.")
+        # Créer un fichier de métadonnées vide pour éviter l'échec des étapes suivantes
         with open(OUTPUT_METADATA_JSON, "w", encoding="utf-8") as f:
-            json.dump(video_metadata, f, ensure_ascii=False, indent=2)
-        print(f"✅ Métadonnées par défaut générées et sauvegardées dans {OUTPUT_METADATA_JSON} (aucun clip trouvé).")
-        exit(0) 
+            json.dump({"title": VIDEO_TITLE_PREFIX, "description": "Aucun clip disponible pour cette compilation.", "tags": VIDEO_TAGS}, f, ensure_ascii=False, indent=2)
+        sys.exit(1)
 
-    # Le clip le plus populaire est le premier de la liste car get_top_clips les trie par vues
-    most_popular_clip_title = clips_data[0].get('title', 'Clip populaire') 
-    
-    # --- Construction du NOUVEAU TITRE de la vidéo (corrigé) ---
-    # Suppression des crochets du titre principal si présents
-    clean_popular_title = most_popular_clip_title.replace('[', '').replace(']', '').strip()
-    # Utilisation du mois en français
-    title = f'{clean_popular_title} | Le Clip Twitch du Jour FR - {day} {month_fr}'
+    # Charger les informations des clips téléchargés (qui incluent la durée réelle)
+    with open(DOWNLOADED_CLIPS_INFO_JSON, "r", encoding="utf-8") as f:
+        downloaded_clips_info = json.load(f)
 
-    # Construire la description de la vidéo avec timecodes
-    description = f"Découvrez les {len(clips_data)} clips Twitch les plus populaires du {day} {month_fr} {year} !\n\n"
-    description += "Chapitres et clips inclus :\n"
+    if not downloaded_clips_info:
+        print("⚠️ Aucune information de clip téléchargée disponible pour générer les métadonnées.")
+        # Créer un fichier de métadonnées vide
+        with open(OUTPUT_METADATA_JSON, "w", encoding="utf-8") as f:
+            json.dump({"title": VIDEO_TITLE_PREFIX, "description": "Aucun clip disponible pour cette compilation.", "tags": VIDEO_TAGS}, f, ensure_ascii=False, indent=2)
+        return
 
-    current_timestamp_seconds = 0.0
-    for i, clip in enumerate(clips_data):
-        title_clip = clip.get('title', 'Titre inconnu') 
-        broadcaster = clip.get('broadcaster_name', 'Streamer inconnu')
-        clip_duration = float(clip.get('duration', 0.0))
+    # --- Construction du titre de la vidéo ---
+    # Le titre peut être dynamique, par exemple avec la date du jour
+    current_date = datetime.now().strftime("%d/%m/%Y")
+    video_title = f"{VIDEO_TITLE_PREFIX} du {current_date}"
 
-        # Formatage du timecode
-        timecode = format_duration(current_timestamp_seconds)
+    # --- Construction de la description de la vidéo avec chapitres ---
+    description_lines = [
+        "Bienvenue sur notre chaîne ! Découvrez les moments les plus drôles, épiques et mémorables de Twitch.",
+        "Abonnez-vous pour ne rien manquer des prochains Top Clips !",
+        "",
+        "Chapitres et clips inclus :"
+    ]
+
+    current_offset = 0.0
+    for clip_info in downloaded_clips_info:
+        # Utilise la durée réelle du clip stockée dans downloaded_clips_info
+        clip_duration = clip_info.get("duration", 0.0)
         
-        # Ajout du clip avec son timecode
-        description += f"{timecode} - {title_clip} par {broadcaster}\n"
-        
-        # Mise à jour du timecode pour le prochain clip
-        current_timestamp_seconds += clip_duration
+        # Assurez-vous que le titre et le nom du streamer sont disponibles
+        clip_title = clip_info.get("title", "Clip inconnu")
+        broadcaster_name = clip_info.get("broadcaster_name", "Streamer inconnu")
 
-    description += "\nN'oubliez pas de vous abonner pour ne manquer aucune compilation quotidienne !\n\n"
-    # Ajout des tags pour le référencement
-    description += "#Twitch #Clips #BestOf #Gaming #Highlights #DailyClips #Top10 #Compilation #MomentsForts #FR #Francophone"
-    
+        # Formatage du timecode et ajout à la description
+        timecode = format_duration(current_offset)
+        description_lines.append(f"{timecode} - {clip_title} par {broadcaster_name}")
+        current_offset += clip_duration
+
+    # Ajouter une section de remerciements ou d'appel à l'action
+    description_lines.extend([
+        "",
+        "Merci d'avoir regardé !",
+        "Laissez un like et un commentaire si la vidéo vous a plu.",
+        "N'oubliez pas de vous abonner pour plus de contenu !"
+    ])
+
+    video_description = "\n".join(description_lines)
+
+    # --- Sauvegarde des métadonnées dans un fichier JSON ---
     video_metadata = {
-        "title": title,
-        "description": description,
-        "tags": ["Twitch", "Clips", "BestOf", "Gaming", "Highlights", "DailyClips", "Top10", "Compilation", "MomentsForts", "FR", "Francophone"],
-        "categoryId": "20", 
-        "privacyStatus": "public" 
+        "title": video_title,
+        "description": video_description,
+        "tags": VIDEO_TAGS
     }
+
+    output_dir = os.path.dirname(OUTPUT_METADATA_JSON)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
     with open(OUTPUT_METADATA_JSON, "w", encoding="utf-8") as f:
         json.dump(video_metadata, f, ensure_ascii=False, indent=2)
 
-    print(f"✅ Métadonnées générées et sauvegardées dans {OUTPUT_METADATA_JSON}")
+    print(f"✅ Métadonnées générées et sauvegardées dans {OUTPUT_METADATA_JSON}.")
+    print(f"Titre: {video_title}")
+    print(f"Description (extrait):\n{video_description[:500]}...") # Affiche un extrait
 
 if __name__ == "__main__":
+    from datetime import datetime # Importation locale pour main
     generate_metadata()
