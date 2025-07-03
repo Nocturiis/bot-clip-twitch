@@ -31,8 +31,12 @@ def download_clips():
         
         clip_id = clip.get("id", f"unknown_id_{i}")
         # Escape single quotes and colons for FFmpeg drawtext filter
-        clip_title = clip.get("title", "Titre inconnu").replace("'", "\\'").replace(":", "\\:")
-        broadcaster_name = clip.get("broadcaster_name", "Streamer inconnu").replace("'", "\\'").replace(":", "\\:")
+        # NOTE: The escape for single quotes is vital, double quotes aren't usually an issue within single-quoted text
+        clip_title = clip.get("title", "Titre inconnu").replace("'", "'\\''") # Correct escaping: ' becomes '\''
+        broadcaster_name = clip.get("broadcaster_name", "Streamer inconnu").replace("'", "'\\''") # Correct escaping
+        # Colons usually don't need escaping in drawtext unless they're part of a filter option
+        # but to be safe we can keep the previous colon escape if needed for other contexts.
+        # For text content, colons are fine.
 
         raw_output_filename = os.path.join(RAW_CLIPS_DIR, f"clip_raw_{clip_id}.mp4") # Store raw download
         processed_output_filename = os.path.join(PROCESSED_CLIPS_DIR, f"clip_processed_{clip_id}.mp4") # Store processed version
@@ -53,8 +57,12 @@ def download_clips():
             print(f"  Prétraitement du clip {i+1}/{len(clips)}: {clip_title} (ajout du texte)...")
             
             # Text for title and streamer
-            title_text = f"Titre: {clip_title}"
-            broadcaster_text = f"Streamer: {broadcaster_name}"
+            # CORRECTION ICI: Les f-strings sont utilisées pour insérer les VALEURS des variables.
+            # L'échappement des apostrophes est crucial pour FFmpeg.
+            # Exemple: f"text='Titre: {clip_title}'"
+            # Si clip_title est "C'est génial", la chaîne devient "text='Titre: C'\''est génial'"
+            title_display = f"Titre: {clip_title}"
+            broadcaster_display = f"Streamer: {broadcaster_name}"
 
             # FFmpeg filtergraph for scaling, padding, FPS, and drawing text
             # We'll use a standard font like 'LiberationSans'
@@ -63,7 +71,8 @@ def download_clips():
             # Streamer: Below the title, with a small margin
             
             # Font settings
-            font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf" # Common path for a standard font
+            # Assurez-vous que ce chemin de police est correct sur l'environnement d'exécution (GitHub Actions)
+            font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
             font_size = 36 # Slightly smaller for two lines, adjust as needed
             text_color = "white"
             border_color = "black"
@@ -72,7 +81,7 @@ def download_clips():
             # Drawtext filter for the title
             title_filter = (
                 f"drawtext=fontfile='{font_path}':"
-                f"text='{title_text}':"
+                f"text='{title_display}':" # Utilise la variable qui contient la VALEUR formatée
                 f"x=(w-text_w)/2:y=H*0.04:" # 4% from top
                 f"fontcolor={text_color}:fontsize={font_size}:"
                 f"bordercolor={border_color}:borderw={border_width}"
@@ -81,7 +90,7 @@ def download_clips():
             # Drawtext filter for the broadcaster name, positioned below the title
             broadcaster_filter = (
                 f"drawtext=fontfile='{font_path}':"
-                f"text='{broadcaster_text}':"
+                f"text='{broadcaster_display}':" # Utilise la variable qui contient la VALEUR formatée
                 f"x=(w-text_w)/2:y=H*0.04+text_h+5:" # Below title + 5 pixels margin
                 f"fontcolor={text_color}:fontsize={font_size}:"
                 f"bordercolor={border_color}:borderw={border_width}"
