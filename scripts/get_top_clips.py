@@ -79,6 +79,7 @@ BROADCASTER_IDS = [
     "57402636",     # RebeuDeter
     "47565457",     # Joyca
     "153066440",    # Michou
+    "41487980",     #Pauleta_Twitch (Pfut)
     "31429949",     # LeBouseuh
     "46296316",     # Maghla
     "49896798",     # Chowh1
