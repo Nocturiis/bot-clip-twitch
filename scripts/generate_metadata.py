@@ -1,7 +1,6 @@
 import os
 import json
-from datetime import datetime
-# import locale # N'est plus nécessaire si on utilise le mappage manuel des mois
+from datetime import datetime, timedelta
 
 # Mappage des noms de mois en français pour une robustesse maximale
 MOIS_FRANCAIS = {
@@ -12,6 +11,15 @@ MOIS_FRANCAIS = {
 
 INPUT_CLIPS_JSON = os.path.join("data", "top_clips.json")
 OUTPUT_METADATA_JSON = os.path.join("data", "video_metadata.json")
+
+def format_duration(seconds):
+    """Formate une durée en secondes en HH:MM:SS."""
+    if seconds < 0:
+        seconds = 0
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    seconds = int(seconds % 60)
+    return f"{hours:02}:{minutes:02}:{seconds:02}"
 
 def generate_metadata():
     print("📝 Génération des métadonnées de la vidéo...")
@@ -31,7 +39,6 @@ def generate_metadata():
 
     if not clips_data:
         print("⚠️ Aucune donnée de clip à traiter. Le fichier top_clips.json est vide.")
-        # Générer des métadonnées vides ou avec un titre par défaut si aucun clip n'est trouvé
         
         # Le titre par défaut utilise la date en français
         default_title = f"TOP TWITCH CLIPS FR - {day} {month_fr.capitalize()}" # Capitaliser le mois pour le titre par défaut
@@ -51,23 +58,30 @@ def generate_metadata():
     # Le clip le plus populaire est le premier de la liste car get_top_clips les trie par vues
     most_popular_clip_title = clips_data[0].get('title', 'Clip populaire') 
     
-    # --- Construction du NOUVEAU TITRE de la vidéo ---
-    # Suppression des crochets du titre principal
+    # --- Construction du NOUVEAU TITRE de la vidéo (corrigé) ---
+    # Suppression des crochets du titre principal si présents
+    clean_popular_title = most_popular_clip_title.replace('[', '').replace(']', '').strip()
     # Utilisation du mois en français
-    title = f'{most_popular_clip_title} | Le Clip Twitch du Jour FR - {day} {month_fr}'
+    title = f'{clean_popular_title} | Le Clip Twitch du Jour FR - {day} {month_fr}'
 
-    # Construire la description de la vidéo
-    # Formatage de la date en français pour la description complète
-    # Utilisation du mois et de l'année en français
-    description = f"Découvrez les {len(clips_data)} clips Twitch les plus populaires du {day} {month_fr} {year} !\n\nClips inclus :\n"
+    # Construire la description de la vidéo avec timecodes
+    description = f"Découvrez les {len(clips_data)} clips Twitch les plus populaires du {day} {month_fr} {year} !\n\n"
+    description += "Chapitres et clips inclus :\n"
 
+    current_timestamp_seconds = 0.0
     for i, clip in enumerate(clips_data):
         title_clip = clip.get('title', 'Titre inconnu') 
         broadcaster = clip.get('broadcaster_name', 'Streamer inconnu')
-        # views = clip.get('viewer_count', 0) # Supprimé car le problème des "vues: 0" est géré en amont
+        clip_duration = float(clip.get('duration', 0.0))
+
+        # Formatage du timecode
+        timecode = format_duration(current_timestamp_seconds)
         
-        # Suppression des apostrophes autour du titre du clip dans la description et des "vues"
-        description += f"- {i+1}. {title_clip} par {broadcaster}\n"
+        # Ajout du clip avec son timecode
+        description += f"{timecode} - {title_clip} par {broadcaster}\n"
+        
+        # Mise à jour du timecode pour le prochain clip
+        current_timestamp_seconds += clip_duration
 
     description += "\nN'oubliez pas de vous abonner pour ne manquer aucune compilation quotidienne !\n\n"
     # Ajout des tags pour le référencement
@@ -77,8 +91,8 @@ def generate_metadata():
         "title": title,
         "description": description,
         "tags": ["Twitch", "Clips", "BestOf", "Gaming", "Highlights", "DailyClips", "Top10", "Compilation", "MomentsForts", "FR", "Francophone"],
-        "categoryId": "20", # Correction de 'category' en 'categoryId'
-        "privacyStatus": "public" # "public", "private", "unlisted"
+        "categoryId": "20", 
+        "privacyStatus": "public" 
     }
 
     with open(OUTPUT_METADATA_JSON, "w", encoding="utf-8") as f:
