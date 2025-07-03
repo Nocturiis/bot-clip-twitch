@@ -25,7 +25,7 @@ OUTPUT_CLIPS_JSON = os.path.join("data", "top_clips.json")
 PRIORITIZE_BROADCASTERS_STRICTLY = True # <-- CHANGEZ CETTE VALEUR (True/False) POUR BASCULER LA LOGIQUE
 
 # NOUVEAU PARAMÈTRE : Nombre maximal de clips par streamer dans la compilation finale.
-MAX_CLIPS_PER_BROADCASTER_IN_FINAL_COMPILATION = 5 # Définis ta limite ici (ex: 5, 10, etc.)
+MAX_CLIPS_PER_BROADCASTER_IN_FINAL_COMPILATION = 3 # Définis ta limite ici (ex: 5, 10, etc.)
 
 # Liste des IDs de jeux pour lesquels vous voulez récupérer des clips.
 GAME_IDS = [
