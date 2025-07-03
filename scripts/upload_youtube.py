@@ -32,45 +32,43 @@ def upload_video():
     with open(METADATA_JSON_PATH, "r", encoding="utf-8") as f:
         metadata = json.load(f)
 
-    # --- DÉBUT DES MODIFICATIONS POUR LE TITRE ---
-    original_title = metadata["title"]
-    description = metadata["description"] # La description est lue mais n'est pas modifiée ici
-    tags = metadata["tags"] # Les tags sont lus mais ne sont pas modifiés ici
+    # --- DÉBUT DES MODIFICATIONS POUR LE TITRE (SIMPLIFIÉ) ---
+    # Le titre complet est déjà généré par generate_metadata.py et devrait être "Titre réel | Le Clip Twitch du Jour FR - Jour Mois Année"
+    title_from_metadata = metadata["title"]
+    description = metadata["description"]
+    tags = metadata["tags"]
     
-    # Nettoyage et troncation du titre
-    today_date_fr = datetime.now().strftime("%d %B") # Ex: "02 juillet"
+    # Nettoyage et troncation du titre complet reçu de generate_metadata.py
+    cleaned_final_title = title_from_metadata
     
-    # Nettoyage du titre : supprimer les éléments potentiellement problématiques
-    cleaned_title = original_title
-    # Supprimer les émojis et caractères spéciaux non essentiels
-    # Conserver alphanumériques, espaces et quelques ponctuations utiles
-    cleaned_title = ''.join(c for c in cleaned_title if c.isalnum() or c.isspace() or c in ['!', '?', '.', ',', ':', ';', '-', '(', ')', '[', ']', '|', '\''])
-    # Supprimer les mentions de !commands ou autres spam potentiels
-    cleaned_title = re.sub(r'!\w+', '', cleaned_title) # Supprime !command
-    cleaned_title = re.sub(r'\s+', ' ', cleaned_title).strip() # Remplace multiples espaces par un seul
+    # Supprimer les caractères spéciaux problématiques, mais conserver ceux utiles (tirets, virgules, points d'interrogation, etc.)
+    # Cette regex conserve les caractères alphanumériques, espaces, et certains ponctuations communes.
+    # Elle supprime les émojis et autres symboles complexes.
+    cleaned_final_title = re.sub(r'[^\w\s\-\.,\'"!?|]', '', cleaned_final_title)
+    
+    # Supprimer les mentions de !commands ou autres spam potentiels (ex: !discord)
+    cleaned_final_title = re.sub(r'!\w+', '', cleaned_final_title)
+    
+    # Remplacer les multiples espaces par un seul et supprimer les espaces en début/fin
+    cleaned_final_title = re.sub(r'\s+', ' ', cleaned_final_title).strip() 
 
-    # Le titre final pour YouTube
-    base_suffix = f" | Le Clip Twitch du Jour FR - {today_date_fr}"
     max_title_length = 100 # Limite de caractères pour les titres YouTube
 
-    # Calculer la longueur maximale disponible pour le titre du clip nettoyé
-    max_clip_title_length_allowed = max_title_length - len(base_suffix)
-
     # Si le titre nettoyé est trop long, le tronquer intelligemment
-    if len(cleaned_title) > max_clip_title_length_allowed:
+    if len(cleaned_final_title) > max_title_length:
         # Tronquer et ajouter "..."
-        truncated_clip_title = cleaned_title[:max_clip_title_length_allowed - 3].strip() 
+        truncated_title = cleaned_final_title[:max_title_length - 3].strip()
         # S'assurer qu'on ne coupe pas un mot en plein milieu
-        last_space = truncated_clip_title.rfind(' ')
-        if last_space != -1:
-            truncated_clip_title = truncated_clip_title[:last_space]
-        cleaned_title = truncated_clip_title + "..."
+        last_space = truncated_title.rfind(' ')
+        if last_space != -1: # Si un espace est trouvé, couper au dernier mot complet
+            truncated_title = truncated_title[:last_space]
+        cleaned_final_title = truncated_title + "..."
     
-    # Si le titre nettoyé est vide après le traitement, utiliser un titre par défaut
-    if not cleaned_title:
-        cleaned_title = "Le meilleur des clips Twitch"
+    # Si le titre nettoyé est vide après le traitement (très rare, mais pour la robustesse)
+    if not cleaned_final_title:
+        cleaned_final_title = "Le meilleur des clips Twitch du Jour" # Titre par défaut
 
-    title = f"{cleaned_title}{base_suffix}"
+    title = cleaned_final_title # C'est le titre final pour YouTube
     # --- FIN DES MODIFICATIONS POUR LE TITRE ---
 
 
@@ -105,7 +103,7 @@ def upload_video():
     except Exception as e:
         print(f"❌ Échec du rafraîchissement du jeton d'accès : {e}")
         print("Vérifiez YOUTUBE_REFRESH_TOKEN, YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET et la validité du token.")
-        sys.exit(1) # Conserver sys.exit(1) ici car c'est une erreur d'authentification critique
+        sys.exit(1)
         
 
     # Construire le service YouTube
@@ -114,7 +112,7 @@ def upload_video():
     # 3. Préparer la vidéo et la miniature
     if not os.path.exists(COMPILED_VIDEO_PATH):
         print(f"❌ Fichier vidéo compilée '{COMPILED_VIDEO_PATH}' introuvable.")
-        sys.exit(1) # Conserver sys.exit(1) ici car la vidéo est essentielle
+        sys.exit(1)
 
     thumbnail_present = False
     if os.path.exists(THUMBNAIL_PATH):
@@ -148,7 +146,7 @@ def upload_video():
 
     try:
         response = insert_request.execute()
-        print(f"✅ Vidéo uploadée ! URL: https://www.youtube.com/watch?v={response['id']}") # Corrigé l'URL de YouTube
+        print(f"✅ Vidéo uploadée ! URL: https://www.youtube.com/watch?v={response['id']}") # URL de YouTube corrigée
         
         # Uploader la miniature
         if thumbnail_present:
@@ -168,9 +166,8 @@ def upload_video():
         return True
     except Exception as e:
         print(f"❌ ERREUR lors de l'upload sur YouTube : {e}")
-        # sys.exit(1) # <--- COMMENTÉ pour permettre au workflow de continuer et de préserver les artefacts
         print("La vidéo compilée a été conservée dans le dossier 'output/' si cette étape a été atteinte.")
-        return False # Retourne False pour indiquer un échec d'upload sans arrêter le processus Python
+        return False
 
 if __name__ == "__main__":
     upload_video()
