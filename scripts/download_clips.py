@@ -57,7 +57,7 @@ def download_clips():
     with open(INPUT_CLIPS_JSON, "r", encoding="utf-8") as f:
         clips = json.load(f)
 
-    # --- NOUVEAU DÉBOGAGE : Aperçu des données lues depuis top_clips.json ---
+    # --- DÉBOGAGE : Aperçu des données lues depuis top_clips.json ---
     if clips:
         print("\n--- Aperçu des données lues depuis top_clips.json dans download_clips.py ---")
         for i, clip_data in enumerate(clips[:3]): # Affiche les 3 premiers clips pour vérification
@@ -80,10 +80,11 @@ def download_clips():
         clip_url = clip["url"]
 
         clip_id = clip.get("id", f"unknown_id_{i}")
-        # Utilisation de la nouvelle fonction d'échappement pour une meilleure robustesse
+        # Récupère les titres et noms bruts
         clip_title_raw = clip.get("title", "Titre inconnu")
         broadcaster_name_raw = clip.get("broadcaster_name", "Streamer inconnu")
 
+        # Échappe les caractères spéciaux pour FFmpeg
         clip_title_escaped = ffmpeg_escape_string(clip_title_raw)
         broadcaster_name_escaped = ffmpeg_escape_string(broadcaster_name_raw)
 
@@ -105,9 +106,10 @@ def download_clips():
             # 2. Prétraitement avec FFmpeg pour normaliser le format, les codecs et ajouter du texte
             print(f"  Prétraitement du clip {i+1}/{len(clips)}: {clip_title_raw} (ajout du texte)...")
 
-            # Utilisation des versions échappées pour le texte affiché
-            title_display = f"Titre: {clip_title_escaped}"
-            broadcaster_display = f"Streamer: {broadcaster_name_escaped}"
+            # --- MODIFICATION ICI : Suppression des préfixes "Titre: " et "Streamer: " ---
+            title_display = clip_title_escaped
+            broadcaster_display = broadcaster_name_escaped
+            # --- FIN MODIFICATION ---
 
             # Font settings - Ensure this font is available in your GitHub Actions runner or provide its path
             font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
@@ -122,18 +124,20 @@ def download_clips():
             border_color = "black"
             border_width = 2
 
+            # Les coordonnées Y (y=H*0.04 et y=H*0.04+text_h+5) placent déjà le texte en haut.
+            # Les couleurs et bordures sont déjà définies comme demandé.
             title_filter = (
                 f"drawtext=fontfile='{font_path}':"
-                f"text='{title_display}':" # Utilise la variable title_display formatée avec le texte échappé
-                f"x=(w-text_w)/2:y=H*0.04:"
+                f"text='{title_display}':"
+                f"x=(w-text_w)/2:y=H*0.04:" # Positionnement en haut
                 f"fontcolor={text_color}:fontsize={font_size}:"
                 f"bordercolor={border_color}:borderw={border_width}"
             )
 
             broadcaster_filter = (
                 f"drawtext=fontfile='{font_path}':"
-                f"text='{broadcaster_display}':" # Utilise la variable broadcaster_display formatée avec le texte échappé
-                f"x=(w-text_w)/2:y=H*0.04+text_h+5:"
+                f"text='{broadcaster_display}':"
+                f"x=(w-text_w)/2:y=H*0.04+text_h+5:" # Positionnement juste en dessous du titre
                 f"fontcolor={text_color}:fontsize={font_size}:"
                 f"bordercolor={border_color}:borderw={border_width}"
             )
