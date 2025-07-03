@@ -1,12 +1,11 @@
 import os
 import json
-import requests
-from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
-from io import BytesIO
+from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError # requests et BytesIO ne sont plus nécessaires
 from datetime import datetime
 
 # Chemins des fichiers
-INPUT_CLIPS_JSON = os.path.join("data", "top_clips.json")
+# INPUT_CLIPS_JSON n'est plus la source directe, on utilise downloaded_clip_paths.json
+DOWNLOADED_CLIPS_INFO_JSON = os.path.join("data", "downloaded_clip_paths.json")
 OUTPUT_THUMBNAIL_PATH = os.path.join("data", "thumbnail.jpg") # Miniature finale
 LOGO_PATH = os.path.join("assets", "your_logo.png") # Chemin vers votre logo PNG
 
@@ -16,7 +15,6 @@ THUMBNAIL_HEIGHT = 720
 
 def get_font(size):
     """Tente de charger une police TrueType ou utilise la police par défaut."""
-    # Chemins courants pour les polices sur différents systèmes
     font_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", # Linux (souvent sur GitHub Actions)
         "/System/Library/Fonts/Supplemental/Arial Bold.ttf",    # macOS
@@ -27,140 +25,96 @@ def get_font(size):
             try:
                 return ImageFont.truetype(path, size)
             except IOError:
-                continue # Essayer le chemin suivant si la police est corrompue ou illisible
+                continue
             
-    # Si aucune police TrueType n'est trouvée/utilisable, charge la police par défaut de Pillow
-    print("⚠️ Aucune police TrueType trouvée. Utilisation de la police par défaut de Pillow.")
+    print("⚠️ Aucune police TrueType trouvée pour la miniature. Utilisation de la police par défaut de Pillow.")
     return ImageFont.load_default()
 
-def download_image(url):
-    """Télécharge une image depuis une URL et la retourne sous forme d'objet Image PIL."""
-    try:
-        response = requests.get(url, stream=True, timeout=10) # Ajout d'un timeout
-        response.raise_for_status()
-        # Lire le contenu une seule fois
-        image_content = BytesIO(response.content)
-        img = Image.open(image_content).convert("RGB") # Convertir en RGB pour éviter problèmes de mode (RGBA, P, etc.)
-        return img
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Erreur lors du téléchargement de l'image {url}: {e}")
-        return None
-    except UnidentifiedImageError: # Gère les cas où le fichier n'est pas une image valide
-        print(f"❌ Erreur: Le fichier téléchargé depuis {url} n'est pas une image valide ou est corrompu.")
-        return None
-    except IOError as e:
-        print(f"❌ Erreur lors de l'ouverture ou du traitement de l'image téléchargée {url}: {e}")
-        return None
+# La fonction download_image n'est plus nécessaire ici !
+# def download_image(url):
+#     # ... (supprimer cette fonction)
 
 def generate_thumbnail():
     print("🏞️ Démarrage de la génération de la miniature personnalisée...")
 
-    # Assurez-vous que le dossier 'data' existe pour la miniature finale
     data_dir = os.path.dirname(OUTPUT_THUMBNAIL_PATH)
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
         print(f"Dossier de données créé : {data_dir}")
 
-    if not os.path.exists(INPUT_CLIPS_JSON):
-        print(f"❌ Erreur: Le fichier '{INPUT_CLIPS_JSON}' est introuvable. Assurez-vous que la récupération des clips a réussi.")
-        # Générer une miniature par défaut si le fichier source est manquant
-        generate_default_thumbnail("Fichier de clips introuvable.")
-        return # Ne pas utiliser sys.exit(1) ici pour permettre au workflow de continuer
+    # Utiliser DOWNLOADED_CLIPS_INFO_JSON comme source
+    if not os.path.exists(DOWNLOADED_CLIPS_INFO_JSON):
+        print(f"❌ Erreur: Le fichier '{DOWNLOADED_CLIPS_INFO_JSON}' est introuvable. Assurez-vous que la compilation a réussi et a sauvegardé les chemins des frames.")
+        generate_default_thumbnail("Fichier de clips introuvable pour la miniature.")
+        return 
 
-    with open(INPUT_CLIPS_JSON, "r", encoding="utf-8") as f:
+    with open(DOWNLOADED_CLIPS_INFO_JSON, "r", encoding="utf-8") as f:
         clips_data = json.load(f)
 
-    # Récupérer la date actuelle pour la miniature par défaut
     today_date = datetime.now()
     date_str = today_date.strftime("%d/%m/%Y")
 
     if not clips_data:
-        print("⚠️ Aucune donnée de clip à traiter. Le fichier top_clips.json est vide. Génération d'une miniature par défaut.")
+        print("⚠️ Aucune donnée de clip à traiter. Le fichier downloaded_clip_paths.json est vide. Génération d'une miniature par défaut.")
         generate_default_thumbnail(f"Aucun clip trouvé pour aujourd'hui ({date_str}).")
-        return # Ne pas utiliser sys.exit(0) ici
+        return 
 
-    # Sélectionner les 4 premières vignettes uniques pour éviter les doublons
-    selected_thumbnail_urls = []
-    seen_urls = set()
+    # Sélectionner les chemins des 4 premières frames disponibles
+    selected_frame_paths = []
     for clip in clips_data:
-        url = clip.get("thumbnail_url")
-        # Twitch thumbnails often have a resolution string like "-{width}x{height}.jpg"
-        # We can try to get a higher resolution version if available, or remove it for the base image
-        if url:
-            # Remove resolution suffix to get a more generic URL, then try to replace with a larger one
-            # Example: https://clips-media-assets2.twitch.tv/AT-cm%7C123456789-preview-480x272.jpg
-            # becomes https://clips-media-assets2.twitch.tv/AT-cm%7C123456789-preview.jpg
-            base_url = url.split('-preview-')[0] + '-preview.jpg' # Simplified approach
-            # Or, for higher quality, try to replace the size part
-            high_res_url = url.replace("-480x272.jpg", "-1280x720.jpg") # Assuming this is a common pattern
-
-            if high_res_url not in seen_urls: # Prioritize high-res if it's different
-                selected_thumbnail_urls.append(high_res_url)
-                seen_urls.add(high_res_url)
-            elif base_url not in seen_urls: # Fallback to base if high-res is same or not found
-                selected_thumbnail_urls.append(base_url)
-                seen_urls.add(base_url)
-        
-        if len(selected_thumbnail_urls) >= 4:
+        frame_path = clip.get("first_frame_path")
+        if frame_path and os.path.exists(frame_path): # Vérifier que le chemin existe bien sur le disque
+            selected_frame_paths.append(frame_path)
+        if len(selected_frame_paths) >= 4:
             break
 
-    if not selected_thumbnail_urls:
-        print("⚠️ Aucune URL de vignette valide trouvée dans les données des clips. Impossible de créer la miniature basée sur les clips. Génération d'une miniature par défaut.")
-        generate_default_thumbnail(f"Aucune vignette disponible ({date_str}).")
-        return # Ne pas utiliser sys.exit(0) ici
+    if not selected_frame_paths:
+        print("⚠️ Aucune frame de vignette disponible ou les chemins sont invalides. Impossible de créer la miniature basée sur les clips. Génération d'une miniature par défaut.")
+        generate_default_thumbnail(f"Aucune frame disponible pour la miniature ({date_str}).")
+        return 
 
     # Créer l'image finale vide
-    final_image = Image.new('RGB', (THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT), color=(0, 0, 0)) # Initialiser avec du noir pour les zones non remplies
+    final_image = Image.new('RGB', (THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT), color=(0, 0, 0))
 
-    # Dimensions pour chaque quadrant (2x2 grille)
     quadrant_width = THUMBNAIL_WIDTH // 2
     quadrant_height = THUMBNAIL_HEIGHT // 2
 
     positions = [
-        (0, 0),                                # Top-left
-        (quadrant_width, 0),                   # Top-right
-        (0, quadrant_height),                  # Bottom-left
-        (quadrant_width, quadrant_height)      # Bottom-right
+        (0, 0),
+        (quadrant_width, 0),
+        (0, quadrant_height),
+        (quadrant_width, quadrant_height)
     ]
 
-    downloaded_images = []
-    for url in selected_thumbnail_urls: # Utilise la liste filtrée
-        img = download_image(url)
-        if img:
-            downloaded_images.append(img)
-        else:
-            print(f"  ❌ Échec du téléchargement de la vignette : {url}. Remplacement par une image noire.")
-            downloaded_images.append(Image.new('RGB', (quadrant_width, quadrant_height), color='black')) # Ajoute une image noire en cas d'échec
+    loaded_images = []
+    for path in selected_frame_paths: # Itérer sur les chemins locaux des frames
+        try:
+            img = Image.open(path).convert("RGB")
+            loaded_images.append(img)
+        except (IOError, UnidentifiedImageError) as e:
+            print(f"  ❌ Échec de chargement de l'image locale {path}: {e}. Remplacement par une image noire.")
+            loaded_images.append(Image.new('RGB', (quadrant_width, quadrant_height), color='black'))
 
-    # S'assurer qu'il y a exactement 4 images (remplir avec du noir si moins de 4 ont été téléchargées/récupérées)
-    while len(downloaded_images) < 4:
-        downloaded_images.append(Image.new('RGB', (quadrant_width, quadrant_height), color='black'))
+    # S'assurer qu'il y a exactement 4 images (remplir avec du noir si moins de 4 ont été chargées)
+    while len(loaded_images) < 4:
+        loaded_images.append(Image.new('RGB', (quadrant_width, quadrant_height), color='black'))
 
     # Coller les images dans les quadrants
-    for i, img in enumerate(downloaded_images):
+    for i, img in enumerate(loaded_images):
         if i < len(positions):
-            # Redimensionner l'image pour qu'elle s'adapte au quadrant
             img = img.resize((quadrant_width, quadrant_height), Image.Resampling.LANCZOS)
             final_image.paste(img, positions[i])
 
     # --- Superposer le logo au centre ---
     if os.path.exists(LOGO_PATH):
         try:
-            logo = Image.open(LOGO_PATH).convert("RGBA") # Garder le canal alpha pour la transparence
+            logo = Image.open(LOGO_PATH).convert("RGBA")
             
-            # NE PAS REDIMENSIONNER LE LOGO ICI - Utiliser sa taille d'origine
-            # target_logo_width = int(THUMBNAIL_WIDTH * 0.4) # Ancien code de redimensionnement
-            # target_logo_height = int(THUMBNAIL_HEIGHT * 0.4)
-            # logo_ratio = min(target_logo_width / logo.width, target_logo_height / logo.height)
-            # new_logo_size = (int(logo.width * logo_ratio), int(logo.height * logo_ratio))
-            # logo = logo.resize(new_logo_size, Image.Resampling.LANCZOS)
-
             # Calculer la position centrale du logo avec sa taille d'origine
             logo_x = (THUMBNAIL_WIDTH - logo.width) // 2
             logo_y = (THUMBNAIL_HEIGHT - logo.height) // 2
             
-            # Superposer le logo (handle alpha for transparency)
-            final_image.paste(logo, (logo_x, logo_y), logo) # Le 3ème argument 'logo' est le masque alpha
+            final_image.paste(logo, (logo_x, logo_y), logo)
             print("✅ Logo superposé.")
         except Exception as e:
             print(f"❌ Erreur lors de la superposition du logo : {e}")
@@ -181,7 +135,6 @@ def generate_default_thumbnail(message):
     draw = ImageDraw.Draw(default_thumbnail)
     
     font = get_font(40)
-    # Utiliser textbbox pour un calcul de taille plus précis avec Pillow 9.0+
     bbox = draw.textbbox((0, 0), message, font=font)
     text_width = bbox[2] - bbox[0]
     text_height = bbox[3] - bbox[1]
@@ -193,7 +146,6 @@ def generate_default_thumbnail(message):
         print(f"✅ Miniature par défaut générée et sauvegardée dans {OUTPUT_THUMBNAIL_PATH}.")
     except Exception as e:
         print(f"❌ Erreur lors de la sauvegarde de la miniature par défaut : {e}")
-
 
 if __name__ == "__main__":
     generate_thumbnail()

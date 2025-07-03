@@ -27,6 +27,21 @@ def get_video_duration(filepath):
         print(f"  ⚠️ Impossible d'obtenir la durée de {filepath} avec ffprobe: {e}")
         return 0.0
 
+def ffmpeg_escape_string(text):
+    """
+    Escapes characters in a string for FFmpeg drawtext filter to prevent syntax errors.
+    Handles backslashes, single quotes, colons, and square brackets.
+    """
+    # Escape backslashes first, then single quotes, then colons
+    text = text.replace('\\', '\\\\')
+    text = text.replace("'", "\\'")
+    text = text.replace(':', '\\:')
+    text = text.replace('[', '\\[')
+    text = text.replace(']', '\\]')
+    # Commas can also be an issue if they're not intended as separators
+    text = text.replace(',', '\\,')
+    return text
+
 def download_clips():
     print("📥 Démarrage du téléchargement et du prétraitement des clips Twitch individuels...")
     os.makedirs(RAW_CLIPS_DIR, exist_ok=True)
@@ -42,6 +57,18 @@ def download_clips():
     with open(INPUT_CLIPS_JSON, "r", encoding="utf-8") as f:
         clips = json.load(f)
 
+    # --- NOUVEAU DÉBOGAGE : Aperçu des données lues depuis top_clips.json ---
+    if clips:
+        print("\n--- Aperçu des données lues depuis top_clips.json dans download_clips.py ---")
+        for i, clip_data in enumerate(clips[:3]): # Affiche les 3 premiers clips pour vérification
+            print(f"Clip {i+1}:")
+            print(f"  ID: {clip_data.get('id', 'N/A')}")
+            print(f"  Title: {clip_data.get('title', 'N/A')}")
+            print(f"  Broadcaster Name: {clip_data.get('broadcaster_name', 'N/A')}")
+            print(f"  URL: {clip_data.get('url', 'N/A')}")
+        print("----------------------------------------------------------------------\n")
+    # --- FIN DÉBOGAGE ---
+
     if not clips:
         print("⚠️ Aucun clip à télécharger. La liste des clips est vide.")
         with open(os.path.join("data", "downloaded_clip_paths.json"), "w") as f:
@@ -51,17 +78,19 @@ def download_clips():
     downloaded_and_processed_info = [] # Will store dicts with path, id, and actual duration
     for i, clip in enumerate(clips):
         clip_url = clip["url"]
-        
+
         clip_id = clip.get("id", f"unknown_id_{i}")
-        # Escape single quotes and colons for FFmpeg drawtext filter
-        # Utilisez re.escape pour une meilleure robustesse, mais attention aux doubles échappements si déjà fait
-        clip_title = clip.get("title", "Titre inconnu").replace("'", "'\\''")
-        broadcaster_name = clip.get("broadcaster_name", "Streamer inconnu").replace("'", "'\\''")
+        # Utilisation de la nouvelle fonction d'échappement pour une meilleure robustesse
+        clip_title_raw = clip.get("title", "Titre inconnu")
+        broadcaster_name_raw = clip.get("broadcaster_name", "Streamer inconnu")
+
+        clip_title_escaped = ffmpeg_escape_string(clip_title_raw)
+        broadcaster_name_escaped = ffmpeg_escape_string(broadcaster_name_raw)
 
         raw_output_filename = os.path.join(RAW_CLIPS_DIR, f"{clip_id}_raw.mp4")
         processed_output_filename = os.path.join(PROCESSED_CLIPS_DIR, f"{clip_id}_processed.mp4")
-        
-        print(f"Téléchargement du clip {i+1}/{len(clips)}: {clip_title} par {broadcaster_name} (ID: {clip_id})...")
+
+        print(f"Téléchargement du clip {i+1}/{len(clips)}: {clip_title_raw} par {broadcaster_name_raw} (ID: {clip_id})...")
         try:
             # 1. Téléchargement avec yt-dlp
             yt_dlp_command = [
@@ -74,13 +103,14 @@ def download_clips():
             print(f"  ✅ Clip téléchargé: {raw_output_filename}")
 
             # 2. Prétraitement avec FFmpeg pour normaliser le format, les codecs et ajouter du texte
-            print(f"  Prétraitement du clip {i+1}/{len(clips)}: {clip_title} (ajout du texte)...")
-            
-            title_display = f"Titre: {clip_title}"
-            broadcaster_display = f"Streamer: {broadcaster_name}"
+            print(f"  Prétraitement du clip {i+1}/{len(clips)}: {clip_title_raw} (ajout du texte)...")
+
+            # Utilisation des versions échappées pour le texte affiché
+            title_display = f"Titre: {clip_title_escaped}"
+            broadcaster_display = f"Streamer: {broadcaster_name_escaped}"
 
             # Font settings - Ensure this font is available in your GitHub Actions runner or provide its path
-            font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf" 
+            font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
             if not os.path.exists(font_path):
                 font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Regular.ttf"
                 if not os.path.exists(font_path):
@@ -94,20 +124,20 @@ def download_clips():
 
             title_filter = (
                 f"drawtext=fontfile='{font_path}':"
-                f"text='{title_display}':"
+                f"text='{title_display}':" # Utilise la variable title_display formatée avec le texte échappé
                 f"x=(w-text_w)/2:y=H*0.04:"
                 f"fontcolor={text_color}:fontsize={font_size}:"
                 f"bordercolor={border_color}:borderw={border_width}"
             )
-            
+
             broadcaster_filter = (
                 f"drawtext=fontfile='{font_path}':"
-                f"text='{broadcaster_display}':"
+                f"text='{broadcaster_display}':" # Utilise la variable broadcaster_display formatée avec le texte échappé
                 f"x=(w-text_w)/2:y=H*0.04+text_h+5:"
                 f"fontcolor={text_color}:fontsize={font_size}:"
                 f"bordercolor={border_color}:borderw={border_width}"
             )
-            
+
             video_filters = (
                 "scale=1920:1080:force_original_aspect_ratio=decrease,"
                 "pad=1920:1080:(ow-iw)/2:(oh-ih)/2,"
@@ -144,8 +174,8 @@ def download_clips():
                 "id": clip_id,
                 "path": processed_output_filename,
                 "duration": actual_duration, # Utilise la durée réelle
-                "title": clip.get("title", "Titre inconnu"), # Ajoute le titre et le streamer pour faciliter
-                "broadcaster_name": clip.get("broadcaster_name", "Streamer inconnu")
+                "title": clip_title_raw, # Conserve le titre original pour les métadonnées
+                "broadcaster_name": broadcaster_name_raw # Conserve le nom original pour les métadonnées
             })
 
         except subprocess.CalledProcessError as e:
@@ -156,9 +186,9 @@ def download_clips():
             print(f"  ❌ Erreur inattendue lors du traitement du clip {clip_url}: {e}")
 
     # Sauvegarde la liste des informations complètes des clips téléchargés et prétraités
-    with open(os.path.join("data", "downloaded_clip_paths.json"), "w") as f:
+    with open(os.path.join("data", "downloaded_clip_paths.json"), "w", encoding="utf-8") as f:
         json.dump(downloaded_and_processed_info, f, ensure_ascii=False, indent=2)
-    
+
     print("✅ Téléchargement et prétraitement des clips terminé.")
 
 if __name__ == "__main__":
