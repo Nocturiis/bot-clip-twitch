@@ -1,7 +1,7 @@
 import os
 import json
 import requests
-from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError # Nécessite Pillow
+from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 from io import BytesIO
 from datetime import datetime
 
@@ -84,9 +84,23 @@ def generate_thumbnail():
     seen_urls = set()
     for clip in clips_data:
         url = clip.get("thumbnail_url")
-        if url and url not in seen_urls:
-            selected_thumbnail_urls.append(url)
-            seen_urls.add(url)
+        # Twitch thumbnails often have a resolution string like "-{width}x{height}.jpg"
+        # We can try to get a higher resolution version if available, or remove it for the base image
+        if url:
+            # Remove resolution suffix to get a more generic URL, then try to replace with a larger one
+            # Example: https://clips-media-assets2.twitch.tv/AT-cm%7C123456789-preview-480x272.jpg
+            # becomes https://clips-media-assets2.twitch.tv/AT-cm%7C123456789-preview.jpg
+            base_url = url.split('-preview-')[0] + '-preview.jpg' # Simplified approach
+            # Or, for higher quality, try to replace the size part
+            high_res_url = url.replace("-480x272.jpg", "-1280x720.jpg") # Assuming this is a common pattern
+
+            if high_res_url not in seen_urls: # Prioritize high-res if it's different
+                selected_thumbnail_urls.append(high_res_url)
+                seen_urls.add(high_res_url)
+            elif base_url not in seen_urls: # Fallback to base if high-res is same or not found
+                selected_thumbnail_urls.append(base_url)
+                seen_urls.add(base_url)
+        
         if len(selected_thumbnail_urls) >= 4:
             break
 
@@ -103,10 +117,10 @@ def generate_thumbnail():
     quadrant_height = THUMBNAIL_HEIGHT // 2
 
     positions = [
-        (0, 0),                                 # Top-left
-        (quadrant_width, 0),                    # Top-right
-        (0, quadrant_height),                   # Bottom-left
-        (quadrant_width, quadrant_height)       # Bottom-right
+        (0, 0),                                # Top-left
+        (quadrant_width, 0),                   # Top-right
+        (0, quadrant_height),                  # Bottom-left
+        (quadrant_width, quadrant_height)      # Bottom-right
     ]
 
     downloaded_images = []
@@ -114,10 +128,12 @@ def generate_thumbnail():
         img = download_image(url)
         if img:
             downloaded_images.append(img)
-        
-    # Remplir avec des images noires si moins de 4 images ont été téléchargées
+        else:
+            print(f"  ❌ Échec du téléchargement de la vignette : {url}. Remplacement par une image noire.")
+            downloaded_images.append(Image.new('RGB', (quadrant_width, quadrant_height), color='black')) # Ajoute une image noire en cas d'échec
+
+    # S'assurer qu'il y a exactement 4 images (remplir avec du noir si moins de 4 ont été téléchargées/récupérées)
     while len(downloaded_images) < 4:
-        # Créer une image noire de la taille du quadrant pour combler
         downloaded_images.append(Image.new('RGB', (quadrant_width, quadrant_height), color='black'))
 
     # Coller les images dans les quadrants
@@ -132,16 +148,14 @@ def generate_thumbnail():
         try:
             logo = Image.open(LOGO_PATH).convert("RGBA") # Garder le canal alpha pour la transparence
             
-            # Redimensionner le logo pour qu'il ne dépasse pas une certaine proportion
-            target_logo_width = int(THUMBNAIL_WIDTH * 1) # 100% de la largeur de la miniature
-            target_logo_height = int(THUMBNAIL_HEIGHT * 1) # 100% de la hauteur de la miniature
-            
-            # Calculer le ratio pour redimensionner le logo sans déformer
-            logo_ratio = min(target_logo_width / logo.width, target_logo_height / logo.height)
-            new_logo_size = (int(logo.width * logo_ratio), int(logo.height * logo_ratio))
-            logo = logo.resize(new_logo_size, Image.Resampling.LANCZOS)
+            # NE PAS REDIMENSIONNER LE LOGO ICI - Utiliser sa taille d'origine
+            # target_logo_width = int(THUMBNAIL_WIDTH * 0.4) # Ancien code de redimensionnement
+            # target_logo_height = int(THUMBNAIL_HEIGHT * 0.4)
+            # logo_ratio = min(target_logo_width / logo.width, target_logo_height / logo.height)
+            # new_logo_size = (int(logo.width * logo_ratio), int(logo.height * logo_ratio))
+            # logo = logo.resize(new_logo_size, Image.Resampling.LANCZOS)
 
-            # Calculer la position centrale du logo
+            # Calculer la position centrale du logo avec sa taille d'origine
             logo_x = (THUMBNAIL_WIDTH - logo.width) // 2
             logo_y = (THUMBNAIL_HEIGHT - logo.height) // 2
             

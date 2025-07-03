@@ -7,17 +7,35 @@ from datetime import datetime, timedelta
 # --- Chemins des fichiers ---
 INPUT_PATHS_JSON = os.path.join("data", "downloaded_clip_paths.json")
 OUTPUT_VIDEO_PATH = os.path.join("output", "compiled_video.mp4")
-# CLIPS_METADATA_JSON n'est plus la source principale des durées ici
 CLIPS_LIST_TXT = os.path.join("data", "clips_list.txt") # Utilisé pour concaténation initiale
 
 # --- PARAMÈTRES FFmpeg ---
-FONT_PATH = "DejaVuSans" # Exemple : Chemin vers une police TTF ou nom de police système
+# FONT_PATH = "DejaVuSans" # Ancien paramètre
 
 # --- NOUVEAU PARAMÈTRE : Limite le nombre total de clips dans la compilation finale ---
 MAX_TOTAL_CLIPS = 20
 
 # Obtenir le répertoire racine du dépôt (où se trouve .github/)
 REPO_ROOT = os.getcwd() 
+
+def get_ffmpeg_font_path():
+    """Tente de trouver un chemin de police fiable pour FFmpeg."""
+    font_paths = [
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", # Common on Linux
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Regular.ttf",        # Common on Linux
+        "/System/Library/Fonts/Supplemental/Arial.ttf",                  # macOS
+        "C:/Windows/Fonts/arial.ttf"                                     # Windows
+    ]
+    for path in font_paths:
+        if os.path.exists(path):
+            print(f"✅ Police trouvée et utilisée pour FFmpeg: {path}")
+            return path
+    print("⚠️ Aucune police TrueType spécifique trouvée. Utilisation d'une police générique 'sans-serif'.")
+    return "sans-serif" # Fallback to generic font family name for FFmpeg
+
+# Appeler la fonction une fois au début pour définir le chemin de la police
+FONT_PATH_FFMPEG = get_ffmpeg_font_path()
+
 
 def format_duration(seconds):
     """Formate une durée en secondes en HH:MM:SS."""
@@ -70,7 +88,7 @@ def compile_video():
     # Crée le fichier de liste pour la concaténation
     with open(CLIPS_LIST_TXT, "w") as f:
         for clip_info in final_clips_to_process:
-            # MODIFICATION ICI : Utilisez os.path.abspath pour obtenir le chemin absolu
+            # Utilisez os.path.abspath pour obtenir le chemin absolu
             absolute_clip_path = os.path.abspath(clip_info['path'])
             f.write(f"file '{absolute_clip_path}'\n")
 
@@ -95,7 +113,7 @@ def compile_video():
     # --- Étape 2: Concaténation et Normalisation Audio ---
     audio_inputs_cmd = []
     for clip_info in final_clips_to_process:
-        # MODIFICATION ICI : Utilisez os.path.abspath pour l'entrée audio aussi
+        # Utilisez os.path.abspath pour l'entrée audio aussi
         absolute_clip_path = os.path.abspath(clip_info['path'])
         audio_inputs_cmd.extend(["-i", absolute_clip_path])
         
@@ -144,7 +162,7 @@ def compile_video():
         
         drawtext_filters.append(
             f"drawtext="
-            f"fontfile='{FONT_PATH}':"
+            f"fontfile='{FONT_PATH_FFMPEG}':" # UTILISE LE NOUVEAU CHEMIN DE POLICE DÉTECTÉ
             f"text='{escaped_text}':"
             f"x=(w-text_w)/2:"
             f"y=h-th-20:"
