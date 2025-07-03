@@ -70,8 +70,9 @@ def compile_video():
     # Crée le fichier de liste pour la concaténation
     with open(CLIPS_LIST_TXT, "w") as f:
         for clip_info in final_clips_to_process:
-            # Assurez-vous que le chemin est absolu ou relatif au répertoire de travail de FFmpeg
-            f.write(f"file '{clip_info['path']}'\n")
+            # MODIFICATION ICI : Utilisez os.path.abspath pour obtenir le chemin absolu
+            absolute_clip_path = os.path.abspath(clip_info['path'])
+            f.write(f"file '{absolute_clip_path}'\n")
 
     concat_video_command = [
         "ffmpeg",
@@ -94,7 +95,9 @@ def compile_video():
     # --- Étape 2: Concaténation et Normalisation Audio ---
     audio_inputs_cmd = []
     for clip_info in final_clips_to_process:
-        audio_inputs_cmd.extend(["-i", clip_info['path']])
+        # MODIFICATION ICI : Utilisez os.path.abspath pour l'entrée audio aussi
+        absolute_clip_path = os.path.abspath(clip_info['path'])
+        audio_inputs_cmd.extend(["-i", absolute_clip_path])
         
     # Création de la chaîne de filtre complex pour l'audio
     audio_filter_complex = ""
