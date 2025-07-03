@@ -84,8 +84,8 @@ BROADCASTER_IDS = [
     "49896798",     # Chowh1
     "49749557",     # Jiraya
     "53696803",     # Wankil Studio (Laink et Terracid - chaîne principale)
-    "72366922",   # Laink (ID individuel, généralement couvert par Wankil Studio)
-    "129845722",  # Terracid (ID individuel, généralement couvert par Wankil Studio)
+    "72366922",     # Laink (ID individuel, généralement couvert par Wankil Studio)
+    "129845722",    # Terracid (ID individuel, généralement couvert par Wankil Studio)
     "51950294",     # Mynthos
     "53140510",     # Etoiles
     "134812328",    # LittleBigWhale
@@ -98,6 +98,10 @@ BROADCASTER_IDS = [
     # Vérifiez laquelle est la plus pertinente pour vous. J'ai gardé la plus courante.
     # ... ajoutez d'autres IDs vérifiés ici ...
 ]
+
+# --- NOUVEAU PARAMÈTRE : Langue du clip ---
+CLIP_LANGUAGE = "fr" # Code ISO 639-1 pour le français
+# --- FIN NOUVEAU PARAMÈTRE ---
 
 # PARAMÈTRE POUR LA DURÉE CUMULÉE MINIMALE DE LA VIDÉO FINALE
 MIN_VIDEO_DURATION_SECONDS = 630 # 10 minutes et 30 secondes (10*60 + 30)
@@ -145,7 +149,8 @@ def get_top_clips(access_token, num_clips_per_source=50, days_ago=1):
             "started_at": start_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
             "ended_at": end_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
             "sort": "views",
-            "game_id": game_id
+            "game_id": game_id,
+            "language": CLIP_LANGUAGE # <-- AJOUTÉ: Filtre par langue
         }
         
         try:
@@ -168,7 +173,8 @@ def get_top_clips(access_token, num_clips_per_source=50, days_ago=1):
                     "broadcaster_name": clip.get("broadcaster_name"),
                     "game_name": clip.get("game_name"),
                     "created_at": clip.get("created_at"),
-                    "duration": float(clip.get("duration", 0.0)) # <-- AJOUTÉ: Assurez-vous que 'duration' est récupéré et converti en float
+                    "duration": float(clip.get("duration", 0.0)),
+                    "language": clip.get("language") # Store the language for verification
                 })
             
         except requests.exceptions.RequestException as e:
@@ -188,7 +194,8 @@ def get_top_clips(access_token, num_clips_per_source=50, days_ago=1):
             "started_at": start_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
             "ended_at": end_date.strftime('%Y-%m-%dT%H:%M:%SZ'),
             "sort": "views",
-            "broadcaster_id": broadcaster_id
+            "broadcaster_id": broadcaster_id,
+            "language": CLIP_LANGUAGE # <-- AJOUTÉ: Filtre par langue
         }
 
         try:
@@ -211,7 +218,8 @@ def get_top_clips(access_token, num_clips_per_source=50, days_ago=1):
                     "broadcaster_name": clip.get("broadcaster_name"),
                     "game_name": clip.get("game_name"),
                     "created_at": clip.get("created_at"),
-                    "duration": float(clip.get("duration", 0.0)) # <-- AJOUTÉ: Assurez-vous que 'duration' est récupéré et converti en float
+                    "duration": float(clip.get("duration", 0.0)),
+                    "language": clip.get("language") # Store the language for verification
                 })
         except requests.exceptions.RequestException as e:
             print(f"❌ Erreur lors de la récupération des clips Twitch pour broadcaster_id {broadcaster_id} : {e}")
@@ -225,7 +233,9 @@ def get_top_clips(access_token, num_clips_per_source=50, days_ago=1):
     # --- NOUVELLE LOGIQUE DE SÉLECTION BASÉE SUR LA DURÉE ET LES VUES ---
 
     # Tri global de tous les clips collectés par viewer_count (descendant)
-    sorted_clips_by_views = sorted(all_top_clips, key=lambda x: x.get('viewer_count', 0), reverse=True)
+    # AJOUTÉ : Filtrer par langue une dernière fois au cas où l'API ne respecte pas parfaitement le paramètre
+    filtered_clips_by_language = [clip for clip in all_top_clips if clip.get('language') == CLIP_LANGUAGE]
+    sorted_clips_by_views = sorted(filtered_clips_by_language, key=lambda x: x.get('viewer_count', 0), reverse=True)
 
     final_clips_for_compilation = []
     current_duration_sum = 0.0 # Utilisez un float pour la somme des durées
@@ -265,7 +275,7 @@ def get_top_clips(access_token, num_clips_per_source=50, days_ago=1):
     print("\n--- CLIPS FINAUX SÉLECTIONNÉS POUR SAUVEGARDE ---")
     if final_clips:
         for i, clip in enumerate(final_clips):
-            print(f"{i+1}. Title: {clip.get('title', 'N/A')}, Broadcaster: {clip.get('broadcaster_name', 'N/A')}, Views: {clip.get('viewer_count', 0)}, Duration: {clip.get('duration', 'N/A')}s, URL: {clip.get('url', 'N/A')}")
+            print(f"{i+1}. Title: {clip.get('title', 'N/A')}, Broadcaster: {clip.get('broadcaster_name', 'N/A')}, Views: {clip.get('viewer_count', 0)}, Duration: {clip.get('duration', 'N/A')}s, Language: {clip.get('language', 'N/A')}, URL: {clip.get('url', 'N/A')}")
     else:
         print("Aucun clip à sauvegarder.")
     print("--------------------------------------------------\n")

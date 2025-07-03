@@ -63,7 +63,7 @@ def compile_video():
             # Par convention, le chemin contient l'ID du clip
             found_path = None
             for path in downloaded_clip_paths:
-                if clip_meta['id'] in path:
+                if clip_meta['id'] in path: # Check for clip ID in the path
                     found_path = path
                     break
             if found_path:
@@ -86,35 +86,81 @@ def compile_video():
             full_absolute_path = os.path.join(REPO_ROOT, path)
             f.write(f"file '{full_absolute_path}'\n")
 
-    # --- COMMANDE FFmpeg MODIFIÉE POUR RÉENCODAGE ET NORMALISATION ---
-    # Ceci va prendre plus de temps mais résoudra les problèmes de format/codec.
+    # --- COMMANDE FFmpeg MODIFIÉE POUR CONCATÉNER RAPIDEMENT ---
+    # Les clips sont déjà prétraités par download_clips.py
     command = [
         "ffmpeg",
         "-f", "concat",
         "-safe", "0",
         "-i", CLIPS_LIST_TXT,
-        "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30", # Assure 1080p, pad si nécessaire, 30fps
-        "-c:v", "libx264",         # Codec vidéo H.264
-        "-preset", "fast",         # Vitesse d'encodage (medium, slow, etc. pour meilleure qualité)
-        "-crf", "23",              # Qualité vidéo (plus petit = meilleure qualité, plus gros fichier)
-        "-pix_fmt", "yuv420p",     # Format de pixel compatible avec la plupart des lecteurs
-        "-c:a", "aac",             # Codec audio AAC
-        "-b:a", "192k",             # Bitrate audio
-        "-ac", "2",                # Stéréo
-        "-ar", "44100",            # Fréquence d'échantillonnage audio
-        "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", # Normalisation audio (Recommandé pour YouTube)
-        OUTPUT_VIDEO_PATH
+        "-c", "copy", # Simply copy the streams, no re-encoding needed here
+        "-an", # Remove audio stream. We will re-add a normalized audio stream in a separate pass if needed.
+        OUTPUT_VIDEO_PATH # Output with no audio first
     ]
     
-    print(f"Exécution de la commande FFmpeg (réencodage): {' '.join(command)}")
+    print(f"Exécution de la commande FFmpeg (concaténation vidéo rapide): {' '.join(command)}")
 
     try:
         process = subprocess.run(command, check=True, cwd=REPO_ROOT, capture_output=True, text=True) 
-        print(f"✅ Vidéo compilée avec succès : {OUTPUT_VIDEO_PATH}")
-        print("FFmpeg STDOUT:\n", process.stdout)
+        print(f"✅ Vidéo compilée (partie vidéo) avec succès : {OUTPUT_VIDEO_PATH}")
+        print("FFmpeg STDOUT (video only):\n", process.stdout)
         if process.stderr:
-            print("FFmpeg STDERR:\n", process.stderr)
+            print("FFmpeg STDERR (video only):\n", process.stderr)
 
+        # --- NOUVELLE ÉTAPE : Normalisation audio et ajout à la vidéo compilée ---
+        # Créez un fichier temporaire pour la vidéo avec l'audio traité
+        temp_output_with_audio_path = os.path.join(output_dir, "compiled_video_temp_audio.mp4")
+
+        # Get all audio streams from processed clips and combine them
+        audio_inputs = []
+        for path in final_clips_to_compile:
+            audio_inputs.extend(["-i", os.path.join(REPO_ROOT, path)])
+        
+        # Command to combine and normalize audio
+        audio_command = [
+            "ffmpeg",
+            *audio_inputs, # All processed clips as inputs
+            "-filter_complex", 
+            f"[0:a][1:a]concat=n={len(final_clips_to_compile)}:v=0:a=1[aout];[aout]loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-c:a", "aac",
+            "-b:a", "192k",
+            "-ac", "2",
+            "-ar", "44100",
+            "-vn", # No video output
+            "-y",
+            os.path.join(output_dir, "compiled_audio.aac") # Output combined and normalized audio
+        ]
+
+        print(f"\nExécution de la commande FFmpeg (extraction et normalisation audio): {' '.join(audio_command)}")
+        audio_process = subprocess.run(audio_command, check=True, cwd=REPO_ROOT, capture_output=True, text=True)
+        print("✅ Audio combiné et normalisé avec succès.")
+        if audio_process.stdout: print("FFmpeg STDOUT (audio):\n", audio_process.stdout)
+        if audio_process.stderr: print("FFmpeg STDERR (audio):\n", audio_process.stderr)
+
+        # Merge video and audio
+        merge_command = [
+            "ffmpeg",
+            "-i", OUTPUT_VIDEO_PATH, # Video only
+            "-i", os.path.join(output_dir, "compiled_audio.aac"), # Normalized audio
+            "-c:v", "copy",
+            "-c:a", "copy",
+            "-map", "0:v:0", # Map video stream from first input
+            "-map", "1:a:0", # Map audio stream from second input
+            "-y", # Overwrite output if exists
+            temp_output_with_audio_path
+        ]
+        
+        print(f"\nExécution de la commande FFmpeg (fusion vidéo et audio): {' '.join(merge_command)}")
+        merge_process = subprocess.run(merge_command, check=True, cwd=REPO_ROOT, capture_output=True, text=True)
+        print("✅ Vidéo finale avec audio normalisé créée.")
+        if merge_process.stdout: print("FFmpeg STDOUT (merge):\n", merge_process.stdout)
+        if merge_process.stderr: print("FFmpeg STDERR (merge):\n", merge_process.stderr)
+
+        # Replace the video-only file with the merged one
+        os.replace(temp_output_with_audio_path, OUTPUT_VIDEO_PATH)
+        # Clean up temporary audio file
+        os.remove(os.path.join(output_dir, "compiled_audio.aac"))
+        
     except subprocess.CalledProcessError as e:
         print(f"❌ Erreur lors de la compilation vidéo : {e}")
         if e.stdout:
