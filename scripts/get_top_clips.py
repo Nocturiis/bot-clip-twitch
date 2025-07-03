@@ -24,6 +24,9 @@ OUTPUT_CLIPS_JSON = os.path.join("data", "top_clips.json")
 # Si FALSE, tous les clips (broadcasters et jeux) seront collectés puis triés globalement par vues.
 PRIORITIZE_BROADCASTERS_STRICTLY = True # <-- CHANGEZ CETTE VALEUR (True/False) POUR BASCULER LA LOGIQUE
 
+# NOUVEAU PARAMÈTRE : Nombre maximal de clips par streamer dans la compilation finale.
+MAX_CLIPS_PER_BROADCASTER_IN_FINAL_COMPILATION = 5 # Définis ta limite ici (ex: 5, 10, etc.)
+
 # Liste des IDs de jeux pour lesquels vous voulez récupérer des clips.
 GAME_IDS = [
     "509670",        # Just Chatting
@@ -151,6 +154,7 @@ def fetch_clips(access_token, params, source_type, source_id):
                 "thumbnail_url": clip.get("thumbnail_url"),
                 "title": clip.get("title"),
                 "viewer_count": clip.get("viewer_count", 0),
+                "broadcaster_id": clip.get("broadcaster_id"), # Assure-toi que l'ID du streamer est inclus
                 "broadcaster_name": clip.get("broadcaster_name"),
                 "game_name": clip.get("game_name"),
                 "created_at": clip.get("created_at"),
@@ -170,8 +174,8 @@ def fetch_clips(access_token, params, source_type, source_id):
             print(f"    Contenu brut de la réponse: {response.content.decode()}")
         return []
 
-def get_top_clips(access_token, num_clips_per_source=50, days_ago=1):    
-    """Fetches and prioritizes clips based on configured parameters."""
+def get_top_clips(access_token, num_clips_per_source=50, days_ago=3):    
+    """Fetches and prioritizes clips based on configured parameters, with a limit per broadcaster."""
     print(f"📊 Récupération d'un maximum de {num_clips_per_source} clips Twitch par source (jeu/streamer) pour les dernières {days_ago} jours...")
             
     end_date = datetime.now(timezone.utc)
@@ -223,17 +227,28 @@ def get_top_clips(access_token, num_clips_per_source=50, days_ago=1):
     # --- Logique de sélection finale basée sur l'option ---
     final_clips_for_compilation = []
     current_duration_sum = 0.0
+    clips_added_per_broadcaster = {} # Nouveau dictionnaire pour suivre le nombre de clips ajoutés par streamer
 
     if PRIORITIZE_BROADCASTERS_STRICTLY:
         print(f"\nMode de sélection: PRIORITAIRE (streamers d'abord). Atteindre {MIN_VIDEO_DURATION_SECONDS}s.")
         # 1. Trier et ajouter les clips des streamers prioritaires
         sorted_priority_clips = sorted(all_broadcaster_clips, key=lambda x: x.get('viewer_count', 0), reverse=True)
         for clip in sorted_priority_clips:
+            broadcaster_id = clip.get('broadcaster_id')
+            
+            # Vérifie si la limite pour ce streamer est atteinte
+            if clips_added_per_broadcaster.get(broadcaster_id, 0) >= MAX_CLIPS_PER_BROADCASTER_IN_FINAL_COMPILATION:
+                print(f"  [PRIO] Ignoré : Limite de clips ({MAX_CLIPS_PER_BROADCASTER_IN_FINAL_COMPILATION}) atteinte pour {clip.get('broadcaster_name', 'N/A')}")
+                continue # Passe au clip suivant
+
             clip_duration = float(clip.get('duration', 0.0))
             if clip_duration > 0:
                 final_clips_for_compilation.append(clip)
                 current_duration_sum += clip_duration
-                print(f"  [PRIO] Ajouté : '{clip.get('title', 'N/A')}' par {clip.get('broadcaster_name', 'N/A')} ({clip_duration:.1f}s, Vues: {clip.get('viewer_count', 0)}). Durée cumulée: {current_duration_sum:.1f}s")
+                # Incrémente le compteur de clips pour ce streamer
+                clips_added_per_broadcaster[broadcaster_id] = clips_added_per_broadcaster.get(broadcaster_id, 0) + 1 
+                
+                print(f"  [PRIO] Ajouté : '{clip.get('title', 'N/A')}' par {clip.get('broadcaster_name', 'N/A')} ({clip_duration:.1f}s, Vues: {clip.get('viewer_count', 0)}). Durée cumulée: {current_duration_sum:.1f}s. Clips de ce streamer: {clips_added_per_broadcaster[broadcaster_id]}/{MAX_CLIPS_PER_BROADCASTER_IN_FINAL_COMPILATION}")
                 
                 if current_duration_sum >= MIN_VIDEO_DURATION_SECONDS and len(final_clips_for_compilation) >= 3:
                     print(f"  ✅ Durée minimale ({MIN_VIDEO_DURATION_SECONDS}s) atteinte avec {len(final_clips_for_compilation)} clips prioritaires.")
@@ -247,12 +262,20 @@ def get_top_clips(access_token, num_clips_per_source=50, days_ago=1):
                 # Double-check if already added (should be covered by seen_clip_ids, but safety)
                 if clip["id"] in [c["id"] for c in final_clips_for_compilation]:
                     continue
+                
+                broadcaster_id = clip.get('broadcaster_id')
+
+                # Applique aussi la limite aux clips de jeux pour éviter qu'un streamer dominent trop la fin
+                if clips_added_per_broadcaster.get(broadcaster_id, 0) >= MAX_CLIPS_PER_BROADCASTER_IN_FINAL_COMPILATION:
+                    print(f"  [JEUX] Ignoré : Limite de clips ({MAX_CLIPS_PER_BROADCASTER_IN_FINAL_COMPILATION}) atteinte pour {clip.get('broadcaster_name', 'N/A')}")
+                    continue # Passe au clip suivant
 
                 clip_duration = float(clip.get('duration', 0.0))
                 if clip_duration > 0:
                     final_clips_for_compilation.append(clip)
                     current_duration_sum += clip_duration
-                    print(f"  [JEUX] Ajouté : '{clip.get('title', 'N/A')}' par {clip.get('broadcaster_name', 'N/A')} ({clip_duration:.1f}s, Vues: {clip.get('viewer_count', 0)}). Durée cumulée: {current_duration_sum:.1f}s")
+                    clips_added_per_broadcaster[broadcaster_id] = clips_added_per_broadcaster.get(broadcaster_id, 0) + 1 
+                    print(f"  [JEUX] Ajouté : '{clip.get('title', 'N/A')}' par {clip.get('broadcaster_name', 'N/A')} ({clip_duration:.1f}s, Vues: {clip.get('viewer_count', 0)}). Durée cumulée: {current_duration_sum:.1f}s. Clips de ce streamer: {clips_added_per_broadcaster[broadcaster_id]}/{MAX_CLIPS_PER_BROADCASTER_IN_FINAL_COMPILATION}")
                     
                     if current_duration_sum >= MIN_VIDEO_DURATION_SECONDS and len(final_clips_for_compilation) >= 3:
                         print(f"  ✅ Durée minimale ({MIN_VIDEO_DURATION_SECONDS}s) atteinte avec {len(final_clips_for_compilation)} clips (mix prioritaires/jeux).")
@@ -269,11 +292,19 @@ def get_top_clips(access_token, num_clips_per_source=50, days_ago=1):
         sorted_clips_by_views = sorted(filtered_clips_by_language, key=lambda x: x.get('viewer_count', 0), reverse=True)
 
         for clip in sorted_clips_by_views:
+            broadcaster_id = clip.get('broadcaster_id')
+
+            # Vérifie si la limite pour ce streamer est atteinte, même en mode classique
+            if clips_added_per_broadcaster.get(broadcaster_id, 0) >= MAX_CLIPS_PER_BROADCASTER_IN_FINAL_COMPILATION:
+                print(f"  [GLOBAL] Ignoré : Limite de clips ({MAX_CLIPS_PER_BROADCASTER_IN_FINAL_COMPILATION}) atteinte pour {clip.get('broadcaster_name', 'N/A')}")
+                continue # Passe au clip suivant
+
             clip_duration = float(clip.get('duration', 0.0))
             if clip_duration > 0:
                 final_clips_for_compilation.append(clip)
                 current_duration_sum += clip_duration
-                print(f"  [GLOBAL] Ajouté : '{clip.get('title', 'N/A')}' par {clip.get('broadcaster_name', 'N/A')} ({clip_duration:.1f}s, Vues: {clip.get('viewer_count', 0)}). Durée cumulée: {current_duration_sum:.1f}s")
+                clips_added_per_broadcaster[broadcaster_id] = clips_added_per_broadcaster.get(broadcaster_id, 0) + 1 
+                print(f"  [GLOBAL] Ajouté : '{clip.get('title', 'N/A')}' par {clip.get('broadcaster_name', 'N/A')} ({clip_duration:.1f}s, Vues: {clip.get('viewer_count', 0)}). Durée cumulée: {current_duration_sum:.1f}s. Clips de ce streamer: {clips_added_per_broadcaster[broadcaster_id]}/{MAX_CLIPS_PER_BROADCASTER_IN_FINAL_COMPILATION}")
                 
                 if current_duration_sum >= MIN_VIDEO_DURATION_SECONDS and len(final_clips_for_compilation) >= 3:
                     print(f"  ✅ Durée minimale ({MIN_VIDEO_DURATION_SECONDS}s) atteinte avec {len(final_clips_for_compilation)} clips.")
