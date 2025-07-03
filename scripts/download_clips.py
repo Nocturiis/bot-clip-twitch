@@ -7,6 +7,7 @@ import re # Importation pour les expressions régulières
 INPUT_CLIPS_JSON = os.path.join("data", "top_clips.json")
 RAW_CLIPS_DIR = os.path.join("data", "raw_clips") # Keep original downloads here
 PROCESSED_CLIPS_DIR = os.path.join("data", "processed_clips") # New directory for consistent clips
+CLIP_FRAMES_DIR = os.path.join("data", "clip_frames") # Nouveau dossier pour les frames extraites
 
 def get_video_duration(filepath):
     """
@@ -46,6 +47,7 @@ def download_clips():
     print("📥 Démarrage du téléchargement et du prétraitement des clips Twitch individuels...")
     os.makedirs(RAW_CLIPS_DIR, exist_ok=True)
     os.makedirs(PROCESSED_CLIPS_DIR, exist_ok=True) # Create the new processed clips directory
+    os.makedirs(CLIP_FRAMES_DIR, exist_ok=True) # Créer le nouveau dossier pour les frames
 
     if not os.path.exists(INPUT_CLIPS_JSON):
         print(f"❌ Fichier des clips '{INPUT_CLIPS_JSON}' introuvable.")
@@ -80,16 +82,15 @@ def download_clips():
         clip_url = clip["url"]
 
         clip_id = clip.get("id", f"unknown_id_{i}")
-        # Récupère les titres et noms bruts
         clip_title_raw = clip.get("title", "Titre inconnu")
         broadcaster_name_raw = clip.get("broadcaster_name", "Streamer inconnu")
 
-        # Échappe les caractères spéciaux pour FFmpeg
         clip_title_escaped = ffmpeg_escape_string(clip_title_raw)
         broadcaster_name_escaped = ffmpeg_escape_string(broadcaster_name_raw)
 
         raw_output_filename = os.path.join(RAW_CLIPS_DIR, f"{clip_id}_raw.mp4")
         processed_output_filename = os.path.join(PROCESSED_CLIPS_DIR, f"{clip_id}_processed.mp4")
+        first_frame_output_path = os.path.join(CLIP_FRAMES_DIR, f"{clip_id}_first_frame.jpg") # Chemin de la frame
 
         print(f"Téléchargement du clip {i+1}/{len(clips)}: {clip_title_raw} par {broadcaster_name_raw} (ID: {clip_id})...")
         try:
@@ -106,12 +107,9 @@ def download_clips():
             # 2. Prétraitement avec FFmpeg pour normaliser le format, les codecs et ajouter du texte
             print(f"  Prétraitement du clip {i+1}/{len(clips)}: {clip_title_raw} (ajout du texte)...")
 
-            # --- MODIFICATION ICI : Suppression des préfixes "Titre: " et "Streamer: " ---
             title_display = clip_title_escaped
             broadcaster_display = broadcaster_name_escaped
-            # --- FIN MODIFICATION ---
 
-            # Font settings - Ensure this font is available in your GitHub Actions runner or provide its path
             font_path = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
             if not os.path.exists(font_path):
                 font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Regular.ttf"
@@ -124,12 +122,10 @@ def download_clips():
             border_color = "black"
             border_width = 2
 
-            # Les coordonnées Y (y=H*0.04 et y=H*0.04+text_h+5) placent déjà le texte en haut.
-            # Les couleurs et bordures sont déjà définies comme demandé.
             title_filter = (
                 f"drawtext=fontfile='{font_path}':"
                 f"text='{title_display}':"
-                f"x=(w-text_w)/2:y=H*0.04:" # Positionnement en haut
+                f"x=(w-text_w)/2:y=H*0.04:"
                 f"fontcolor={text_color}:fontsize={font_size}:"
                 f"bordercolor={border_color}:borderw={border_width}"
             )
@@ -137,7 +133,7 @@ def download_clips():
             broadcaster_filter = (
                 f"drawtext=fontfile='{font_path}':"
                 f"text='{broadcaster_display}':"
-                f"x=(w-text_w)/2:y=H*0.04+text_h+5:" # Positionnement juste en dessous du titre
+                f"x=(w-text_w)/2:y=H*0.04+text_h+5:"
                 f"fontcolor={text_color}:fontsize={font_size}:"
                 f"bordercolor={border_color}:borderw={border_width}"
             )
@@ -169,27 +165,39 @@ def download_clips():
             subprocess.run(ffmpeg_preprocess_command, check=True, capture_output=True, text=True)
             print(f"  ✅ Clip prétraité avec texte: {processed_output_filename}")
 
-            # --- NOUVEAU : Obtenir la durée réelle du clip traité ---
+            # --- NOUVEAU : Extraire la première frame du clip traité ---
+            print(f"  Extraction de la première frame pour {clip_id}...")
+            ffmpeg_extract_frame_command = [
+                "ffmpeg",
+                "-i", processed_output_filename,
+                "-vframes", "1",
+                "-q:v", "2", # Qualité de sortie (1-31, 1 est le meilleur)
+                "-y",
+                first_frame_output_path
+            ]
+            subprocess.run(ffmpeg_extract_frame_command, check=True, capture_output=True, text=True)
+            print(f"  ✅ Première frame extraite: {first_frame_output_path}")
+            # --- FIN NOUVEAU ---
+
             actual_duration = get_video_duration(processed_output_filename)
             print(f"  Durée réelle du clip traité: {actual_duration:.2f} secondes.")
-            # --- FIN NOUVEAU ---
 
             downloaded_and_processed_info.append({
                 "id": clip_id,
                 "path": processed_output_filename,
-                "duration": actual_duration, # Utilise la durée réelle
-                "title": clip_title_raw, # Conserve le titre original pour les métadonnées
-                "broadcaster_name": broadcaster_name_raw # Conserve le nom original pour les métadonnées
+                "duration": actual_duration,
+                "title": clip_title_raw,
+                "broadcaster_name": broadcaster_name_raw,
+                "first_frame_path": first_frame_output_path # Ajoute le chemin de la frame
             })
 
         except subprocess.CalledProcessError as e:
-            print(f"  ❌ Erreur lors du traitement du clip {clip_url} (téléchargement ou prétraitement): {e}")
+            print(f"  ❌ Erreur lors du traitement du clip {clip_url} (téléchargement ou prétraitement/extraction frame): {e}")
             if e.stdout: print(f"    STDOUT: {e.stdout}")
             if e.stderr: print(f"    STDERR: {e.stderr}")
         except Exception as e:
             print(f"  ❌ Erreur inattendue lors du traitement du clip {clip_url}: {e}")
 
-    # Sauvegarde la liste des informations complètes des clips téléchargés et prétraités
     with open(os.path.join("data", "downloaded_clip_paths.json"), "w", encoding="utf-8") as f:
         json.dump(downloaded_and_processed_info, f, ensure_ascii=False, indent=2)
 
