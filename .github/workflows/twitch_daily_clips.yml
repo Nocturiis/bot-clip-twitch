@@ -27,11 +27,12 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt # Installe les dépendances Python
 
-    - name: 📁 Create data directories
+    - name: 📁 Create data and output directories
       run: |
         mkdir -p data/raw_clips
-        # Also create the 'output' directory which compile_video.py now uses
-        mkdir -p output 
+        mkdir -p output
+        # Les sous-dossiers comme data/processed_clips et data/clip_frames
+        # sont créés par download_clips.py, donc pas besoin ici.
         echo "Data and output directories created."
 
     - name: 📊 Get Top 10 Twitch Clips
@@ -40,7 +41,7 @@ jobs:
         TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
       run: python scripts/get_top_clips.py
 
-    - name: 📥 Download Individual Clips
+    - name: 📥 Download Individual Clips and Extract Frames
       run: python scripts/download_clips.py
 
     - name: 🎬 Compile Video
@@ -56,8 +57,11 @@ jobs:
         if-no-files-found: ignore # Do not fail the step if the file is not found
     # --- FIN DE LA NOUVELLE ÉTAPE ---
 
-    - name: 📝 Generate Metadata and Thumbnail
+    - name: 📝 Generate Video Metadata
       run: python scripts/generate_metadata.py
+
+    - name: 🏞️ Generate Thumbnail # <--- NOUVELLE ÉTAPE AJOUTÉE ICI
+      run: python scripts/generate_thumbnail.py
 
     - name: 📤 Upload to YouTube
       env:
@@ -71,7 +75,5 @@ jobs:
       if: always() # Exécute même si les étapes précédentes échouent
       run: |
         rm -rf data/
-        # Also remove the 'output' directory if you don't need to keep the video in the runner's workspace
-        # If you're relying on artifacts, keeping it here is redundant.
-        rm -rf output/ 
+        rm -rf output/
         echo "Temporary data and output directories cleaned."
