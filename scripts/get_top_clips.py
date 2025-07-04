@@ -22,7 +22,7 @@ OUTPUT_CLIPS_JSON = os.path.join("data", "top_clips.json")
 # NOUVELLE OPTION DE CONFIGURATION :
 # Si TRUE, le script privilégiera strictement les clips de BROADCASTER_IDS avant d'ajouter des clips de GAME_IDS.
 # Si FALSE, tous les clips (broadcasters et jeux) seront collectés puis triés globalement par vues.
-PRIORITIZE_BROADCASTERS_STRICTLY = True # <-- CHANGEZ CETTE VALEUR (True/False) POUR BASCULER LA LOGIQUE
+PRIORITIZE_BROADCASTERS_STRICTLY = False # <-- CHANGEZ CETTE VALEUR (True/False) POUR BASCULER LA LOGIQUE
 
 # NOUVEAU PARAMÈTRE : Nombre maximal de clips par streamer dans la compilation finale.
 MAX_CLIPS_PER_BROADCASTER_IN_FINAL_COMPILATION = 3 # Définis ta limite ici (ex: 5, 10, etc.)
