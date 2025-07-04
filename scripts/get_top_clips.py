@@ -64,18 +64,19 @@ GAME_IDS = [
 # Liste des IDs de streamers francophones populaires.
 # Les clips seront prioritaires selon l'ordre de cette liste si PRIORITIZE_BROADCASTERS_STRICTLY est True.
 BROADCASTER_IDS = [
-    "80716629",      # Inoxtag
-    "737048563",     # Anyme023"
+    "737048563",     # Anyme023
     "52130765",      # Squeezie (chaîne principale)
     "22245231",      # SqueezieLive (sa chaîne secondaire pour le live)
-    "41719107",      # ZeratoR
-    "24147592",      # Gotaga
-    "134966333",     # Kameto
+    "80716629",      # Inoxtag
+    "153066440",     # Michou
     "737048563",     # AmineMaTue
     "496105401",     # byilhann
+    "57402636",      # RebeuDeter
     "887001013",     # Nico_la
     "60256640",      # Flamby
     "253195796",     # helydia
+    "24147592",      # Gotaga
+    "134966333",     # Kameto
     "175560856",     # Hctuan
     "57404419",      # Ponce
     "38038890",      # Antoine Daniel
@@ -83,9 +84,8 @@ BROADCASTER_IDS = [
     "19075728",      # Sardoche
     "54546583",      # Locklear
     "50290500",      # Domingo
-    "57402636",      # RebeuDeter
     "47565457",      # Joyca
-    "153066440",     # Michou
+    "41719107",      # ZeratoR
     "41487980",      # Pauleta_Twitch (Pfut)
     "31429949",      # LeBouseuh
     "46296316",      # Maghla
@@ -153,7 +153,7 @@ def fetch_clips(access_token, params, source_type, source_id):
                 "embed_url": clip.get("embed_url"),
                 "thumbnail_url": clip.get("thumbnail_url"),
                 "title": clip.get("title"),
-                "viewer_count": clip.get("viewer_count", 0),
+                "viewer_count": clip.get("view_count", 0),
                 "broadcaster_id": clip.get("broadcaster_id"), # Assure-toi que l'ID du streamer est inclus
                 "broadcaster_name": clip.get("broadcaster_name"),
                 "game_name": clip.get("game_name"),
