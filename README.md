@@ -5,19 +5,19 @@ Ce projet est une solution automatisée pour générer des compilations de clips
 ## ✨ Fonctionnalités
 
   * **Récupération de Clips Intelligente :** Collecte les clips les plus populaires de jeux spécifiques et/ou de streamers Twitch définis.
-  * **Priorisation Avancée :**
-      * Les clips sont priorisés selon l'ordre défini dans la liste des IDs de streamers (`BROADCASTER_IDS`).
-      * Pour chaque streamer, les clips sont triés par nombre de vues (les plus vus en premier).
-      * Une **limite de 5 clips par streamer** est appliquée pour assurer une diversité de contenu dans la compilation finale.
-      * Les clips des jeux génériques (non liés aux streamers prioritaires) sont ajoutés ensuite, triés par vues, pour atteindre la durée minimale souhaitée.
+  * **Modes de Priorisation Avancés :** Configurez la stratégie de sélection des clips :
+      * **Priorisation Stricte des Streamers (`PRIORITIZE_BROADCASTERS_STRICTLY = True`) :** Le script privilégie strictement les clips des streamers définis (`BROADCASTER_IDS`) en premier. Il tente d'atteindre la durée vidéo minimale avec ces clips avant d'intégrer des clips de jeux. L'ordre des streamers dans la liste peut influencer la priorité.
+      * **Mode Classique (`PRIORITIZE_BROADCASTERS_STRICTLY = False`) :** Tous les clips collectés (streamers et jeux) sont combinés puis triés globalement par nombre de vues (les plus vus en premier), assurant une sélection basée sur la popularité générale.
+  * **Limite de Clips par Streamer :** Une limite configurable (`MAX_CLIPS_PER_BROADCASTER_IN_FINAL_COMPILATION`) est appliquée pour assurer une diversité de contenu et éviter qu'un seul streamer ne domine la compilation finale.
   * **Filtrage Robuste :**
-      * Filtre les clips par langue (`fr` pour le français).
-      * Exclut les clips de durée nulle ou les titres de clips génériques/de test ("NUMBERz").
-  * **Téléchargement Automatisé :** Télécharge les fichiers vidéo des clips Twitch.
-  * **Déduplication des Clips :** Assure que chaque clip n'apparaît qu'une seule fois dans la compilation, même s'il est trouvé via différentes recherches (par jeu et par streamer).
+      * Filtre les clips par langue (`CLIP_LANGUAGE`, par défaut `fr` pour le français).
+      * Exclut les clips de durée nulle ou les titres de clips génériques/de test.
+  * **Téléchargement Automatisé :** Télécharge les fichiers vidéo des clips Twitch et extrait la première frame de chaque clip pour une utilisation potentielle en vignette.
+  * **Déduplication des Clips :** Le processus de collecte assure que chaque clip n'apparaît qu'une seule fois dans la compilation, même s'il est trouvé via différentes recherches (par jeu et par streamer).
   * **Génération Vidéo :** Assemble les clips téléchargés en une seule vidéo MP4, avec un son uniforme et un potentiel fondu entre les clips.
-  * **Mise en Ligne YouTube :** Uploade automatiquement la compilation vidéo sur une chaîne YouTube spécifiée, avec un titre et une description générés dynamiquement.
-  * **Gestion des Métadonnées :** Crée un fichier JSON (`top_clips.json`) avec les détails des clips sélectionnés pour faciliter la gestion et le débogage.
+  * **Génération de Vignettes Personnalisées :** Crée une vignette attrayante pour la vidéo en utilisant la première frame d'un clip sélectionné et un logo personnalisable, le tout sauvegardé sous `data/thumbnail.jpg`.
+  * **Mise en Ligne YouTube :** Uploade automatiquement la compilation vidéo sur une chaîne YouTube spécifiée, avec un titre et une description générés dynamiquement et une miniature personnalisée.
+  * **Gestion des Métadonnées :** Crée un fichier JSON (`data/video_metadata.json`) avec les détails des clips sélectionnés, ainsi que le titre, la description et les tags de la vidéo finale.
   * **Intégration GitHub Actions :** Conçu pour s'exécuter de manière entièrement automatisée via des workflows GitHub Actions, permettant des compilations régulières sans intervention manuelle.
 
 ## 🛠️ Technologies Utilisées
@@ -27,6 +27,7 @@ Ce projet est une solution automatisée pour générer des compilations de clips
   * **YouTube Data API v3 :** Pour l'upload des vidéos.
   * **`requests` :** Bibliothèque Python pour les requêtes HTTP.
   * **`moviepy` :** Bibliothèque Python pour le montage vidéo (concaténation, ajustement audio).
+  * **`Pillow (PIL)` :** Bibliothèque Python pour la manipulation d'images et la génération de vignettes.
   * **`google-auth-oauthlib`, `google-api-python-client` :** Pour l'authentification et l'interaction avec l'API YouTube.
   * **`yt-dlp` :** Outil externe (appelé via `subprocess`) pour le téléchargement robuste des clips Twitch.
   * **GitHub Actions :** Pour l'orchestration et l'automatisation du workflow.
@@ -81,21 +82,7 @@ Pour des raisons de sécurité, ne codez jamais en dur vos identifiants API dans
       * `TWITCH_CLIENT_SECRET` : Votre Client Secret Twitch.
       * `YOUTUBE_CLIENT_ID` : Votre ID client OAuth de Google.
       * `YOUTUBE_CLIENT_SECRET` : Votre Secret client OAuth de Google.
-      * `YOUTUBE_REFRESH_TOKEN`: Ce secret sera ajouté *après* la première authentification manuelle (voir section "Configuration du token YouTube pour GitHub Actions").
-
-### 4\. `config.py` (facultatif, mais recommandé)
-
-Si vous n'utilisez pas GitHub Secrets pour les tests locaux, vous pouvez créer un fichier `config.py` à la racine de votre projet avec vos identifiants :
-
-```python
-# config.py
-TWITCH_CLIENT_ID = "votre_client_id_twitch"
-TWITCH_CLIENT_SECRET = "votre_client_secret_twitch"
-YOUTUBE_CLIENT_ID = "votre_client_id_youtube"
-YOUTUBE_CLIENT_SECRET = "votre_client_secret_youtube"
-```
-
-Et modifiez vos scripts pour les importer si `os.getenv` ne trouve rien. Cependant, **l'utilisation des secrets GitHub est la méthode préférée pour les workflows automatisés.**
+      * `YOUTUBE_REFRESH_TOKEN`: Ce secret sera ajouté ***après*** la première authentification manuelle (voir section "Configuration du token YouTube pour GitHub Actions").
 
 ## 🚀 Utilisation
 
@@ -118,26 +105,22 @@ Et modifiez vos scripts pour les importer si `os.getenv` ne trouve rien. Cependa
     ```bash
     pip install -r requirements.txt
     ```
-4.  **Installer `yt-dlp` :**
-    ```bash
-    pip install yt-dlp
-    ```
-    Ou, pour une installation système autonome (recommandé pour de meilleures performances et fiabilité) :
-      * [Instructions `yt-dlp`](https://www.google.com/search?q=%5Bhttps://github.com/yt-dlp/yt-dlp%23installation%5D\(https://github.com/yt-dlp/yt-dlp%23installation\))
+    (Note : `yt-dlp` sera installé via `requirements.txt`.)
 
-### 2\. Configuration des Listes d'IDs
+### 2\. Configuration des Listes d'IDs et Paramètres
 
 Les fichiers de configuration clés sont situés dans le dossier `scripts/`.
 
   * **`scripts/get_top_clips.py` :**
-
+      * **`PRIORITIZE_BROADCASTERS_STRICTLY` :** (True/False) Définissez `True` pour prioriser strictement les streamers, ou `False` pour une sélection globale par vues.
       * **`GAME_IDS` :** Modifiez cette liste avec les IDs des jeux Twitch dont vous souhaitez récupérer les clips.
-      * **`BROADCASTER_IDS` :** Modifiez cette liste avec les IDs des streamers Twitch que vous souhaitez prioriser. **L'ordre de cette liste est important \!**
+      * **`BROADCASTER_IDS` :** Modifiez cette liste avec les IDs des streamers Twitch que vous souhaitez inclure. L'ordre de cette liste est important en mode de priorisation stricte.
       * **`MIN_VIDEO_DURATION_SECONDS` :** Ajustez la durée minimale souhaitée pour la compilation vidéo finale (en secondes).
-      * **`MAX_CLIPS_PER_BROADCASTER` :** Modifiez cette valeur pour limiter le nombre de clips par streamer dans la compilation finale (par défaut à 5).
+      * **`MAX_CLIPS_PER_BROADCASTER_IN_FINAL_COMPILATION` :** Modifiez cette valeur pour limiter le nombre maximal de clips par streamer dans la compilation finale (par défaut à 3 dans le script).
+      * **`CLIP_LANGUAGE` :** (ex: `"fr"`) Code ISO 639-1 pour la langue des clips à récupérer.
 
-    *Comment trouver un `BROADCASTER_ID` ou `GAME_ID`?*
-    Exécutez `python scripts/get_broadcaster_id.py` et suivez les instructions. Il vous demandera un nom d'utilisateur Twitch ou un nom de jeu et affichera son ID.
+*Comment trouver un `BROADCASTER_ID` ou `GAME_ID`?*
+Exécutez `python scripts/get_broadcaster_id.py` et suivez les instructions. Il vous demandera un nom d'utilisateur Twitch ou un nom de jeu et affichera son ID.
 
 ### 3\. Authentification YouTube pour GitHub Actions (Une fois)
 
@@ -157,86 +140,120 @@ La première authentification YouTube doit être faite manuellement pour obtenir
 
 Vous pouvez exécuter les scripts individuellement pour les tests :
 
-1.  **Récupérer les clips :**
+1.  **Récupérer et prétraiter les clips :**
 
     ```bash
     python scripts/get_top_clips.py
     ```
 
-    Cela va générer `data/top_clips.json` et télécharger les clips dans `data/clips/`.
+    Cela va générer `data/top_clips.json` et télécharger les clips dans `data/raw_clips/`.
 
-2.  **Supprimer les clips en double :**
-
-    ```bash
-    python scripts/deduplicate_clips.py
-    ```
-
-    Cela mettra à jour `data/top_clips.json` en supprimant les doublons (par URL de téléchargement).
-
-3.  **Générer la vidéo :**
+2.  **Télécharger les clips individuels et extraire les frames :**
 
     ```bash
-    python scripts/generate_video.py
+    python scripts/download_clips.py
     ```
 
-    Cela créera `output/final_compilation.mp4`.
+    Cela télécharge les clips sélectionnés dans `data/raw_clips/` et leurs premières frames dans `data/clip_frames/`.
 
-4.  **Uploader sur YouTube :**
+3.  **Compiler la vidéo :**
+
+    ```bash
+    python scripts/compile_video.py
+    ```
+
+    Cela créera `output/compiled_video.mp4`.
+
+4.  **Générer les métadonnées de la vidéo :**
+
+    ```bash
+    python scripts/generate_metadata.py
+    ```
+
+    Cela générera le titre, la description et les tags dans `data/video_metadata.json`.
+
+5.  **Générer la miniature personnalisée :**
+
+    ```bash
+    python scripts/generate_thumbnail.py
+    ```
+
+    Cela créera `data/thumbnail.jpg`.
+
+6.  **Uploader sur YouTube :**
 
     ```bash
     python scripts/upload_youtube.py
     ```
 
-    Cela utilisera `data/top_clips.json` pour le titre/description et uploader `output/final_compilation.mp4`.
+    Cela utilisera `data/video_metadata.json` pour les informations de la vidéo, `output/compiled_video.mp4` pour le fichier vidéo et `data/thumbnail.jpg` pour la miniature.
 
 ### 5\. Exécution (GitHub Actions - Recommandé)
 
 Le projet est configuré pour une automatisation complète via GitHub Actions. Les workflows se trouvent dans le dossier `.github/workflows/`.
 
-  * Le workflow principal (`main.yml` ou similaire) est déclenché par un push sur `main` ou un calendrier (cron job).
-  * Il exécutera séquentiellement :
-    1.  `get_top_clips.py`
-    2.  `deduplicate_clips.py`
-    3.  `generate_video.py`
-    4.  `upload_youtube.py`
+  * Le workflow principal (`twitch_daily_clips.yml`) est déclenché par un push sur `main` ou un calendrier (cron job).
+  * Il exécutera séquentiellement les étapes pour :
+    1.  Cloner le dépôt (`Checkout code`).
+    2.  Installer Python et les dépendances.
+    3.  Créer les dossiers de travail.
+    4.  Récupérer les clips Twitch (`get_top_clips.py`).
+    5.  Télécharger les clips et extraire les frames (`download_clips.py`).
+    6.  Compiler la vidéo (`compile_video.py`).
+    7.  Uploader la vidéo compilée comme artefact (facultatif, pour archivage).
+    8.  Générer les métadonnées de la vidéo (`generate_metadata.py`).
+    9.  Générer la miniature (`generate_thumbnail.py`).
+    10. Uploader sur YouTube (`upload_youtube.py`).
+    11. Nettoyer les fichiers temporaires.
 
 **Pour lancer une exécution manuelle sur GitHub Actions :**
 
 1.  Allez dans l'onglet **"Actions"** de votre dépôt GitHub.
-2.  Sélectionnez votre workflow (ex: "Compile and Upload Twitch Clips").
-3.  Cliquez sur **"Run workflow"** (ou "Run workflow manually" si configuré ainsi).
+2.  Sélectionnez votre workflow (ex: "Twitch Daily Top 10 Clips").
+3.  Cliquez sur **"Run workflow"** pour déclencher une exécution manuelle.
+
+### 6\. Configuration du Cron Job
+
+Le workflow est programmé pour s'exécuter automatiquement. Dans votre fichier `.github/workflows/twitch_daily_clips.yml`, la ligne `cron: '0 15 * * *'` signifie que le workflow s'exécutera tous les jours à **15h00 UTC**.
+
+  * Pour **Herve, Wallonia, Belgium** (CEST), cela correspond à **17h00 CEST** (UTC+2 en heure d'été). Ajustez l'heure UTC dans le cron si vous souhaitez une heure d'exécution différente.
 
 ## 🗄️ Structure du Projet
 
 ```
 .
-├── .github/                 # Dossier de configuration GitHub Actions
+├── .github/                  # Dossier de configuration GitHub Actions
 │   └── workflows/
-│       └── main.yml         # Workflow principal pour l'automatisation
-├── scripts/                 # Scripts Python du projet
-│   ├── get_broadcaster_id.py# Aide à trouver les IDs de streamers/jeux
-│   ├── get_top_clips.py     # Récupère et sélectionne les clips de Twitch
-│   ├── deduplicate_clips.py # Supprime les clips dupliqués
-│   ├── generate_video.py    # Compile les clips en une vidéo
-│   └── upload_youtube.py    # Uploade la vidéo sur YouTube
-├── data/                    # Dossier pour les données temporaires
-│   ├── top_clips.json       # Informations sur les clips sélectionnés
-│   └── clips/               # Sous-dossier pour les fichiers vidéo téléchargés
-├── output/                  # Dossier pour les fichiers de sortie
-│   └── final_compilation.mp4# La vidéo de compilation finale
-├── client_secrets.json      # Vos identifiants OAuth YouTube (NE PAS COMMETTRE SUR GIT APRES UTILISATION INITIALE SI VOUS POUVEZ)
-├── token.json               # Jeton d'authentification YouTube (GÉNÉRÉ APRES LA 1ERE AUTH ET NE PAS COMMETTRE SUR GIT)
-├── requirements.txt         # Dépendances Python du projet
-└── README.md                # Ce fichier !
+│       └── twitch_daily_clips.yml # Workflow principal pour l'automatisation
+├── scripts/                  # Scripts Python du projet
+│   ├── get_broadcaster_id.py # Aide à trouver les IDs de streamers/jeux
+│   ├── get_top_clips.py      # Récupère et sélectionne les clips de Twitch
+│   ├── download_clips.py     # Télécharge les clips et extrait les premières frames
+│   ├── compile_video.py      # Compile les clips en une vidéo finale
+│   ├── generate_metadata.py  # Génère le titre, la description et les tags de la vidéo
+│   ├── generate_thumbnail.py # Génère la miniature personnalisée
+│   └── upload_youtube.py     # Uploade la vidéo sur YouTube
+├── data/                     # Dossier pour les données temporaires
+│   ├── top_clips.json        # Informations sur les clips sélectionnés
+│   ├── video_metadata.json   # Métadonnées (titre, description, tags) de la vidéo finale
+│   ├── thumbnail.jpg         # La miniature générée pour YouTube
+│   ├── raw_clips/            # Sous-dossier pour les fichiers vidéo de clips bruts téléchargés
+│   ├── processed_clips/      # Sous-dossier pour les clips traités (audio ajusté, etc.)
+│   └── clip_frames/          # Sous-dossier pour les premières frames extraites des clips
+├── output/                   # Dossier pour les fichiers de sortie
+│   └── compiled_video.mp4    # La vidéo de compilation finale
+├── client_secrets.json       # Vos identifiants OAuth YouTube (NE PAS COMMETTRE SUR GIT APRÈS UTILISATION INITIALE !)
+├── token.json                # Jeton d'authentification YouTube (GÉNÉRÉ APRÈS LA 1ÈRE AUTH ET NE PAS COMMETTRE SUR GIT !)
+├── requirements.txt          # Dépendances Python du projet
+└── README.md                 # Ce fichier !
 ```
 
 ## ⚠️ Notes Importantes et Dépannage
 
   * **Limites d'API :** Soyez conscient des limites de requêtes de l'API Twitch et YouTube. Des requêtes trop fréquentes peuvent entraîner des blocages temporaires.
   * **Limites d'Upload YouTube :** Si vous rencontrez l'erreur "uploadLimitExceeded", cela signifie que votre compte YouTube a atteint sa limite quotidienne d'upload. Vous devrez attendre 24h ou vérifier/augmenter les limites dans votre YouTube Studio (Paramètres \> Chaîne \> Éligibilité des fonctionnalités).
-  * **Audio Mixage :** Le script essaie d'unifier le volume des clips. Si le mixage audio n'est pas idéal, des ajustements dans `generate_video.py` peuvent être nécessaires (ex: `clip.set_audio(clip.audio.volumex(0.8))`).
-  * **`yt-dlp` :** Assurez-vous que `yt-dlp` est bien installé et accessible depuis le chemin de votre système si vous l'installez séparément. Si vous l'installez via `pip`, il devrait être géré par l'environnement virtuel.
-  * **Fichiers temporaires :** Le dossier `data/clips/` peut devenir volumineux. Pensez à le nettoyer régulièrement ou à ajouter une étape de nettoyage dans votre workflow GitHub Actions si nécessaire.
+  * **Audio Mixage :** Le script essaie d'unifier le volume des clips. Si le mixage audio n'est pas idéal, des ajustements dans `compile_video.py` peuvent être nécessaires (ex: `clip.set_audio(clip.audio.volumex(0.8))`).
+  * **Fichiers temporaires :** Les dossiers `data/` et `output/` peuvent devenir volumineux. Ils sont automatiquement nettoyés à la fin du workflow GitHub Actions.
   * **Fuseau horaire :** Toutes les dates sont gérées en UTC (`timezone.utc`) pour la cohérence avec l'API Twitch.
   * **Sécurité des secrets :** Ne jamais exposer vos clés API directement dans le code ou les commits Git. Utilisez toujours les secrets GitHub.
 
