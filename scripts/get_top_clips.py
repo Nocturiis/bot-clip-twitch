@@ -64,18 +64,18 @@ GAME_IDS = [
 # Liste des IDs de streamers francophones populaires.
 # Les clips seront prioritaires selon l'ordre de cette liste si PRIORITIZE_BROADCASTERS_STRICTLY est True.
 BROADCASTER_IDS = [
-    "737048563", # Anyme023"
+    "80716629",      # Inoxtag
+    "737048563",     # Anyme023"
     "52130765",      # Squeezie (chaîne principale)
     "22245231",      # SqueezieLive (sa chaîne secondaire pour le live)
     "41719107",      # ZeratoR
     "24147592",      # Gotaga
     "134966333",     # Kameto
-    "737048563",     # AmineMaTue (était Anyme023, même ID)
+    "737048563",     # AmineMaTue
     "496105401",     # byilhann
     "887001013",     # Nico_la
     "60256640",      # Flamby
     "253195796",     # helydia
-    "80716629",      # Inoxtag
     "175560856",     # Hctuan
     "57404419",      # Ponce
     "38038890",      # Antoine Daniel
@@ -86,7 +86,7 @@ BROADCASTER_IDS = [
     "57402636",      # RebeuDeter
     "47565457",      # Joyca
     "153066440",     # Michou
-    "41487980",      #Pauleta_Twitch (Pfut)
+    "41487980",      # Pauleta_Twitch (Pfut)
     "31429949",      # LeBouseuh
     "46296316",      # Maghla
     "49896798",      # Chowh1
