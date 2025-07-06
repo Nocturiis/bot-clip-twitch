@@ -33,7 +33,7 @@ def get_ffmpeg_font_path():
 FONT_PATH_FFMPEG = get_ffmpeg_font_path()
 
 # --- NOUVEAU PARAMÈTRE : Limite le nombre total de clips dans la compilation finale ---
-MAX_TOTAL_CLIPS = 20
+MAX_TOTAL_CLIPS = 30
 
 # Obtenir le répertoire racine du dépôt (où se trouve .github/)
 REPO_ROOT = os.getcwd() 
